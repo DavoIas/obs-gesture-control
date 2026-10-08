@@ -1,0 +1,202 @@
+import cv2
+import time
+import threading
+import numpy as np
+import mediapipe as mp
+from typing import Optional, Callable, List, Tuple, Any
+from app.config.manager import config_manager
+from app.vision.hand_detector import HandDetector, HandLandmarksAdapter
+from app.vision.gesture_recognizer import GestureRecognizer
+from app.vision.gesture_engine import gesture_engine
+from app.core.logger import logger
+from app.core.events import event_bus
+
+class CameraHandler:
+    """
+    Gerenciador thread-safe da captura da webcam em segundo plano.
+    Executa a visão computacional, o desenho de landmarks, overlay visual e o processamento de gestos.
+    """
+    _instance = None
+    _lock = threading.RLock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(CameraHandler, cls).__new__(cls)
+                cls._instance.cap: Optional[cv2.VideoCapture] = None
+                cls._instance.is_running = False
+                cls._instance._thread: Optional[threading.Thread] = None
+                cls._instance.detector = HandDetector(max_hands=2)
+                cls._instance.recognizer = GestureRecognizer()
+                cls._instance.on_frame_callbacks: List[Callable] = []
+            return cls._instance
+
+    def add_on_frame_listener(self, callback: Callable):
+        with self._lock:
+            if callback not in self.on_frame_callbacks:
+                self.on_frame_callbacks.append(callback)
+
+    def remove_on_frame_listener(self, callback: Callable):
+        with self._lock:
+            if callback in self.on_frame_callbacks:
+                self.on_frame_callbacks.remove(callback)
+
+    def _try_open(self, idx: int) -> Optional[cv2.VideoCapture]:
+        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF] if cv2.os.name == 'nt' else [cv2.CAP_ANY]
+        for backend in backends:
+            try:
+                cap = cv2.VideoCapture(idx, backend)
+                if cap and cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret and frame is not None and frame.mean() >= 10.0:
+                        return cap
+                    cap.release()
+            except Exception:
+                pass
+        return None
+
+    def start(self) -> bool:
+        with self._lock:
+            if self.is_running:
+                return True
+
+            cam_cfg = config_manager.config.camera
+            target_idx = cam_cfg.device_index
+
+            logger.log(f"Iniciando captura de vídeo na câmera (Dispositivo {target_idx})...")
+            self.cap = self._try_open(target_idx)
+
+            if not self.cap:
+                logger.log(f"Câmera no índice {target_idx} indisponível ou tela preta. Procurando webcam física ativa...", "WARNING")
+                for alt_idx in [2, 0, 1, 3, 4]:
+                    cap_alt = self._try_open(alt_idx)
+                    if cap_alt:
+                        self.cap = cap_alt
+                        cam_cfg.device_index = alt_idx
+                        config_manager.save()
+                        logger.log(f"Câmera ativa com imagem real encontrada no índice {alt_idx}!")
+                        break
+
+            if not self.cap:
+                msg = "Não foi possível abrir nenhuma câmera (testados índices 0 a 3)."
+                logger.log(msg, "ERROR")
+                event_bus.publish("on_camera_status", active=False, message=msg)
+                return False
+
+            self.is_running = True
+            self._thread = threading.Thread(target=self._process_loop, daemon=True)
+            self._thread.start()
+
+            msg = f"Câmera iniciada com sucesso (Dispositivo {cam_cfg.device_index})"
+            logger.log(msg)
+            event_bus.publish("on_camera_status", active=True, message=msg)
+            return True
+
+    def stop(self):
+        with self._lock:
+            self.is_running = False
+            if self.cap:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = None
+            msg = "Câmera parada."
+            logger.log(msg)
+            event_bus.publish("on_camera_status", active=False, message=msg)
+
+    def _process_loop(self):
+        while self.is_running and self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if not ret or frame is None:
+                time.sleep(0.03)
+                continue
+
+            # Espelhamento horizontal para experiência natural do usuário
+            frame = cv2.flip(frame, 1)
+
+            cam_cfg = config_manager.config.camera
+
+            # Processar mãos com MediaPipe
+            raw_hands = []
+            if self.detector.landmarker:
+                try:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame_rgb = np.ascontiguousarray(frame_rgb)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+                    result = self.detector.landmarker.detect(mp_image)
+                    if result and result.hand_landmarks:
+                        raw_hands = result.hand_landmarks
+                except Exception as e:
+                    print(f"[Camera] MediaPipe detect error: {e}")
+
+            detected_gesture = "unknown"
+            confidence = 0.0
+
+            # Reconhecimento da mão primária
+            if raw_hands:
+                hand_adapter = HandLandmarksAdapter(raw_hands[0])
+                detected_gesture, confidence = self.recognizer.evaluate_hand(hand_adapter.landmark)
+
+                # Desenhar esqueleto se ativado nas configurações
+                if cam_cfg.draw_landmarks:
+                    self.detector.draw_landmarks(frame, raw_hands)
+
+            # Processar lógica no GestureEngine
+            engine_result = gesture_engine.process(detected_gesture, confidence)
+
+            # Desenhar Overlay na Imagem (se ativado)
+            if cam_cfg.draw_overlay:
+                self._draw_overlay(frame, engine_result)
+
+            # Notificar listeners de GUI com a cópia do frame
+            with self._lock:
+                listeners = list(self.on_frame_callbacks)
+            
+            for cb in listeners:
+                try:
+                    cb(frame, engine_result, raw_hands)
+                except Exception as e:
+                    pass
+
+            # Controlar taxa de FPS (ex: 30 FPS => ~0.033s)
+            time.sleep(1.0 / max(10, cam_cfg.target_fps))
+
+    def _draw_overlay(self, frame: np.ndarray, engine_result: Dict[str, Any]):
+        g_id = engine_result.get("gesture", "unknown")
+        conf = engine_result.get("confidence", 0)
+        stab = engine_result.get("stability", 0)
+        consecutive = engine_result.get("consecutive", 0)
+        req_frames = engine_result.get("required_frames", 8)
+
+        profile = config_manager.get_active_profile()
+        g_cfg = profile.gestures.get(g_id)
+        icon = g_cfg.icon if g_cfg else "🖐️"
+        name = g_cfg.custom_name if g_cfg else (g_id.upper() if g_id != "unknown" else "SEM GESTO")
+
+        h, w, _ = frame.shape
+        overlay = frame.copy()
+
+        # Caixa semi-transparente no canto superior esquerdo
+        cv2.rectangle(overlay, (15, 15), (340, 105), (20, 20, 30), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        cv2.rectangle(frame, (15, 15), (340, 105), (100, 100, 120), 1)
+
+        if g_id != "unknown":
+            color = (140, 240, 140) if consecutive >= req_frames else (230, 210, 100)
+            cv2.putText(frame, f"Gesto: {name}", (30, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Confianca: {conf}%", (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (220, 220, 220), 1, cv2.LINE_AA)
+            
+            # Barra de estabilidade
+            bar_w = int(100 * (stab / 100.0))
+            cv2.rectangle(frame, (180, 58), (280, 70), (50, 50, 60), -1)
+            cv2.rectangle(frame, (180, 58), (180 + bar_w, 70), (140, 240, 140), -1)
+            cv2.rectangle(frame, (180, 58), (280, 70), (180, 180, 180), 1)
+            
+            # Progresso dos frames de confirmação
+            frame_str = f"Progresso: {consecutive}/{req_frames}"
+            cv2.putText(frame, frame_str, (30, 93), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 220, 255), 1, cv2.LINE_AA)
+        else:
+            cv2.putText(frame, "Aguardando Gesto...", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (180, 180, 190), 2, cv2.LINE_AA)
+
+camera_handler = CameraHandler()

@@ -1,0 +1,657 @@
+{
+  "active_profile": "Live Gaming",
+  "test_mode": false,
+  "confirm_destructive_actions": true,
+  "default_cooldown": 1.5,
+  "obs": {
+    "host": "localhost",
+    "port": 4455,
+    "password": "",
+    "auto_connect": true,
+    "auto_reconnect": true,
+    "reconnect_interval": 5.0
+  },
+  "camera": {
+    "device_index": 1,
+    "target_fps": 30,
+    "resolution_width": 1280,
+    "resolution_height": 720,
+    "draw_landmarks": true,
+    "draw_overlay": true,
+    "max_hands": 2
+  },
+  "profiles": {
+    "Live Gaming": {
+      "name": "Live Gaming",
+      "description": "Perfil para transmissões de jogos",
+      "gestures": {
+        "peace": {
+          "gesture_id": "peace",
+          "icon": "✌️",
+          "default_name": "Peace / Paz",
+          "custom_name": "Trocar para Gameplay",
+          "description": "Muda a cena principal para a transmissão de jogos.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Cena 1",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 4,
+          "sensitivity": 60
+        },
+        "thumbs_up": {
+          "gesture_id": "thumbs_up",
+          "icon": "👍",
+          "default_name": "Thumbs Up / Positivo",
+          "custom_name": "Mostrar Câmera",
+          "description": "Ativa a fonte da câmera na cena atual.",
+          "active": true,
+          "action": {
+            "action_type": "enable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_down": {
+          "gesture_id": "thumbs_down",
+          "icon": "👎",
+          "default_name": "Thumbs Down / Negativo",
+          "custom_name": "Esconder Câmera",
+          "description": "Desativa temporariamente a fonte da webcam.",
+          "active": true,
+          "action": {
+            "action_type": "disable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "open_hand": {
+          "gesture_id": "open_hand",
+          "icon": "🖐️",
+          "default_name": "Open Hand / Mão Aberta",
+          "custom_name": "Mutar Microfone",
+          "description": "Muta a fonte de áudio do microfone principal.",
+          "active": false,
+          "action": {
+            "action_type": "mute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 72
+        },
+        "fist": {
+          "gesture_id": "fist",
+          "icon": "✊",
+          "default_name": "Fist / Punho Fechado",
+          "custom_name": "Desmutar Microfone",
+          "description": "Ativa o áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "unmute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "point": {
+          "gesture_id": "point",
+          "icon": "☝️",
+          "default_name": "Point / Apontar",
+          "custom_name": "Trocar para Just Chatting",
+          "description": "Muda a cena ativa para bate-papo com os espectadores.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Just Chatting",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "love_you": {
+          "gesture_id": "love_you",
+          "icon": "🤟",
+          "default_name": "Love-You / Rock",
+          "custom_name": "Alternar Pausa da Gravação",
+          "description": "Pausa ou retoma a gravação local no OBS.",
+          "active": true,
+          "action": {
+            "action_type": "toggle_record_pause",
+            "scene_name": "",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "pinch": {
+          "gesture_id": "pinch",
+          "icon": "🤏",
+          "default_name": "Pinch / Pinça",
+          "custom_name": "Cena BRB / Intervalo",
+          "description": "Alterna a cena para a tela de 'Volto Já'.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "BRB",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        }
+      }
+    },
+    "Just Chatting": {
+      "name": "Just Chatting",
+      "description": "Perfil para conversar com inscritos",
+      "gestures": {
+        "peace": {
+          "gesture_id": "peace",
+          "icon": "✌️",
+          "default_name": "Peace / Paz",
+          "custom_name": "Cena Chatting Zoom",
+          "description": "Muda a cena principal para a transmissão de jogos.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Gameplay",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_up": {
+          "gesture_id": "thumbs_up",
+          "icon": "👍",
+          "default_name": "Thumbs Up / Positivo",
+          "custom_name": "Mostrar Câmera",
+          "description": "Ativa a fonte da câmera na cena atual.",
+          "active": true,
+          "action": {
+            "action_type": "enable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_down": {
+          "gesture_id": "thumbs_down",
+          "icon": "👎",
+          "default_name": "Thumbs Down / Negativo",
+          "custom_name": "Esconder Câmera",
+          "description": "Desativa temporariamente a fonte da webcam.",
+          "active": true,
+          "action": {
+            "action_type": "disable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "open_hand": {
+          "gesture_id": "open_hand",
+          "icon": "🖐️",
+          "default_name": "Open Hand / Mão Aberta",
+          "custom_name": "Mutar Microfone",
+          "description": "Muta a fonte de áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "mute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "fist": {
+          "gesture_id": "fist",
+          "icon": "✊",
+          "default_name": "Fist / Punho Fechado",
+          "custom_name": "Desmutar Microfone",
+          "description": "Ativa o áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "unmute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "point": {
+          "gesture_id": "point",
+          "icon": "☝️",
+          "default_name": "Point / Apontar",
+          "custom_name": "Cena Reação",
+          "description": "Muda a cena ativa para bate-papo com os espectadores.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Just Chatting",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "love_you": {
+          "gesture_id": "love_you",
+          "icon": "🤟",
+          "default_name": "Love-You / Rock",
+          "custom_name": "Alternar Pausa da Gravação",
+          "description": "Pausa ou retoma a gravação local no OBS.",
+          "active": true,
+          "action": {
+            "action_type": "toggle_record_pause",
+            "scene_name": "",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "pinch": {
+          "gesture_id": "pinch",
+          "icon": "🤏",
+          "default_name": "Pinch / Pinça",
+          "custom_name": "Cena BRB / Intervalo",
+          "description": "Alterna a cena para a tela de 'Volto Já'.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "BRB",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        }
+      }
+    },
+    "Gravação": {
+      "name": "Gravação",
+      "description": "Perfil otimizado para gravação de tutoriais",
+      "gestures": {
+        "peace": {
+          "gesture_id": "peace",
+          "icon": "✌️",
+          "default_name": "Peace / Paz",
+          "custom_name": "Trocar para Gameplay",
+          "description": "Muda a cena principal para a transmissão de jogos.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Gameplay",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_up": {
+          "gesture_id": "thumbs_up",
+          "icon": "👍",
+          "default_name": "Thumbs Up / Positivo",
+          "custom_name": "Mostrar Câmera",
+          "description": "Ativa a fonte da câmera na cena atual.",
+          "active": true,
+          "action": {
+            "action_type": "enable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_down": {
+          "gesture_id": "thumbs_down",
+          "icon": "👎",
+          "default_name": "Thumbs Down / Negativo",
+          "custom_name": "Esconder Câmera",
+          "description": "Desativa temporariamente a fonte da webcam.",
+          "active": true,
+          "action": {
+            "action_type": "disable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "open_hand": {
+          "gesture_id": "open_hand",
+          "icon": "🖐️",
+          "default_name": "Open Hand / Mão Aberta",
+          "custom_name": "Mutar Microfone",
+          "description": "Muta a fonte de áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "mute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "fist": {
+          "gesture_id": "fist",
+          "icon": "✊",
+          "default_name": "Fist / Punho Fechado",
+          "custom_name": "Desmutar Microfone",
+          "description": "Ativa o áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "unmute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "point": {
+          "gesture_id": "point",
+          "icon": "☝️",
+          "default_name": "Point / Apontar",
+          "custom_name": "Trocar para Just Chatting",
+          "description": "Muda a cena ativa para bate-papo com os espectadores.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Just Chatting",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "love_you": {
+          "gesture_id": "love_you",
+          "icon": "🤟",
+          "default_name": "Love-You / Rock",
+          "custom_name": "Parar Gravação",
+          "description": "Pausa ou retoma a gravação local no OBS.",
+          "active": true,
+          "action": {
+            "action_type": "stop_record",
+            "scene_name": "",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": true
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "pinch": {
+          "gesture_id": "pinch",
+          "icon": "🤏",
+          "default_name": "Pinch / Pinça",
+          "custom_name": "Cena BRB / Intervalo",
+          "description": "Alterna a cena para a tela de 'Volto Já'.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "BRB",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        }
+      }
+    },
+    "YouTube": {
+      "name": "YouTube",
+      "description": "Perfil para streams no YouTube",
+      "gestures": {
+        "peace": {
+          "gesture_id": "peace",
+          "icon": "✌️",
+          "default_name": "Peace / Paz",
+          "custom_name": "Trocar para Gameplay",
+          "description": "Muda a cena principal para a transmissão de jogos.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Gameplay",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_up": {
+          "gesture_id": "thumbs_up",
+          "icon": "👍",
+          "default_name": "Thumbs Up / Positivo",
+          "custom_name": "Mostrar Câmera",
+          "description": "Ativa a fonte da câmera na cena atual.",
+          "active": true,
+          "action": {
+            "action_type": "enable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "thumbs_down": {
+          "gesture_id": "thumbs_down",
+          "icon": "👎",
+          "default_name": "Thumbs Down / Negativo",
+          "custom_name": "Esconder Câmera",
+          "description": "Desativa temporariamente a fonte da webcam.",
+          "active": true,
+          "action": {
+            "action_type": "disable_source",
+            "scene_name": "Just Chatting",
+            "source_name": "Webcam",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "open_hand": {
+          "gesture_id": "open_hand",
+          "icon": "🖐️",
+          "default_name": "Open Hand / Mão Aberta",
+          "custom_name": "Mutar Microfone",
+          "description": "Muta a fonte de áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "mute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "fist": {
+          "gesture_id": "fist",
+          "icon": "✊",
+          "default_name": "Fist / Punho Fechado",
+          "custom_name": "Desmutar Microfone",
+          "description": "Ativa o áudio do microfone principal.",
+          "active": true,
+          "action": {
+            "action_type": "unmute_source",
+            "scene_name": "",
+            "source_name": "Mic/Aux",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "point": {
+          "gesture_id": "point",
+          "icon": "☝️",
+          "default_name": "Point / Apontar",
+          "custom_name": "Trocar para Just Chatting",
+          "description": "Muda a cena ativa para bate-papo com os espectadores.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "Just Chatting",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "love_you": {
+          "gesture_id": "love_you",
+          "icon": "🤟",
+          "default_name": "Love-You / Rock",
+          "custom_name": "Alternar Pausa da Gravação",
+          "description": "Pausa ou retoma a gravação local no OBS.",
+          "active": true,
+          "action": {
+            "action_type": "toggle_record_pause",
+            "scene_name": "",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        },
+        "pinch": {
+          "gesture_id": "pinch",
+          "icon": "🤏",
+          "default_name": "Pinch / Pinça",
+          "custom_name": "Cena BRB / Intervalo",
+          "description": "Alterna a cena para a tela de 'Volto Já'.",
+          "active": true,
+          "action": {
+            "action_type": "switch_scene",
+            "scene_name": "BRB",
+            "source_name": "",
+            "volume_db": 0.0,
+            "command_str": "",
+            "confirm_required": false
+          },
+          "cooldown": 1.5,
+          "required_frames": 8,
+          "sensitivity": 75
+        }
+      }
+    }
+  }
+}
