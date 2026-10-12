@@ -1,5 +1,6 @@
 import os
 import urllib.request
+import hashlib
 import cv2
 import numpy as np
 from typing import Optional, List, Any, Tuple
@@ -50,6 +51,7 @@ class HandDetector:
     """
     MODEL_PATH = str(ROOT / "hand_landmarker.task")
     MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+    MODEL_SHA256 = "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
 
     def __init__(
         self,
@@ -65,19 +67,57 @@ class HandDetector:
         self.landmarker = None
         self._init_detector()
 
+    @classmethod
+    def _verify_sha256(cls, file_path: str) -> bool:
+        try:
+            hasher = hashlib.sha256()
+            with open(file_path, "rb") as f:
+                while chunk := f.read(65536):
+                    hasher.update(chunk)
+            return hasher.hexdigest().lower() == cls.MODEL_SHA256.lower()
+        except Exception:
+            return False
+
+    def _ensure_model_file(self) -> bool:
+        if os.path.exists(self.MODEL_PATH):
+            if self._verify_sha256(self.MODEL_PATH):
+                return True
+            print(f"[HandDetector] Arquivo existente '{self.MODEL_PATH}' falhou na verificação SHA-256. Baixando novamente...")
+            try:
+                os.remove(self.MODEL_PATH)
+            except Exception:
+                pass
+
+        temp_path = f"{self.MODEL_PATH}.tmp"
+        try:
+            print(f"[HandDetector] Baixando modelo MediaPipe sob demanda para '{temp_path}'...")
+            urllib.request.urlretrieve(self.MODEL_URL, temp_path)
+            if not self._verify_sha256(temp_path):
+                print("[HandDetector] Erro de integridade: SHA-256 do arquivo baixado diverge do esperado.")
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                return False
+
+            os.replace(temp_path, self.MODEL_PATH)
+            print("[HandDetector] Modelo MediaPipe verificado e salvo com sucesso!")
+            return True
+        except Exception as e:
+            print(f"[HandDetector] Erro durante o download ou verificação do modelo: {e}")
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            return False
+
     def _init_detector(self):
         if not MP_AVAILABLE:
             print("[HandDetector] MediaPipe não disponível no ambiente.")
             return
 
-        if not os.path.exists(self.MODEL_PATH):
-            try:
-                print(f"[HandDetector] Baixando modelo MediaPipe ({self.MODEL_PATH})...")
-                urllib.request.urlretrieve(self.MODEL_URL, self.MODEL_PATH)
-                print("[HandDetector] Modelo baixado com sucesso!")
-            except Exception as e:
-                print(f"[HandDetector] Erro ao baixar modelo MediaPipe: {e}")
-                return
+        if not self._ensure_model_file():
+            print(f"[HandDetector] Não foi possível obter o modelo validado em '{self.MODEL_PATH}'.")
+            return
 
         try:
             options = HandLandmarkerOptions(

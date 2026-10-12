@@ -22,3 +22,7 @@ Desktop.ini
 
 # Logs
 *.log
+
+# MediaPipe models
+*.task
+*.task.tmp
