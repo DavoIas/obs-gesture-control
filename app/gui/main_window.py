@@ -867,6 +867,7 @@ class MainWindow(ctk.CTk):
         event_bus.subscribe("on_log_message", self._on_log_message)
         event_bus.subscribe("on_action_confirm_required", self._on_confirm_dialog)
         event_bus.subscribe("on_camera_fps", self._on_camera_fps)
+        event_bus.subscribe("on_camera_fallback", self._on_camera_fallback)
 
     def _on_camera_fps(self, fps: float):
         def update():
@@ -949,6 +950,40 @@ class MainWindow(ctk.CTk):
             ctk.CTkButton(btn_box, text="Sim, Executar", fg_color="#c92a2a", command=on_confirm).pack(side="left", padx=10)
             ctk.CTkButton(btn_box, text="Cancelar", fg_color="gray40", command=close_dialog).pack(side="right", padx=10)
         self._ui_queue.put(ask)
+
+    def _on_camera_fallback(self, fallback_index: int, original_index: int):
+        def ask_save():
+            top = ctk.CTkToplevel(self)
+            top.title("Câmera Alternativa Encontrada")
+            top.geometry("460x220")
+            top.attributes("-topmost", True)
+
+            def on_yes():
+                config_manager.config.camera.device_index = fallback_index
+                config_manager.save()
+                if hasattr(self, 'combo_cam_idx'):
+                    self.combo_cam_idx.set(str(fallback_index))
+                top.destroy()
+
+            def on_no():
+                top.destroy()
+
+            top.protocol("WM_DELETE_WINDOW", on_no)
+
+            ctk.CTkLabel(top, text="📷 Câmera Alternativa Conectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+            msg = (
+                f"O dispositivo {original_index} configurado não pôde ser aberto.\n"
+                f"Foi detectada uma webcam ativa no dispositivo {fallback_index}.\n\n"
+                f"Deseja salvar o dispositivo {fallback_index} como seu padrão nas configurações?"
+            )
+            ctk.CTkLabel(top, text=msg, wraplength=420, justify="center").pack(pady=10)
+
+            btn_box = ctk.CTkFrame(top, fg_color="transparent")
+            btn_box.pack(pady=10)
+            ctk.CTkButton(btn_box, text="Sim, Salvar como Padrão", command=on_yes, fg_color="#2b8a3e", hover_color="#237032").pack(side="left", padx=10)
+            ctk.CTkButton(btn_box, text="Não, Usar Apenas Agora", command=on_no, fg_color="gray40").pack(side="right", padx=10)
+
+        self._ui_queue.put(ask_save)
 
     def _on_camera_frame(self, frame, engine_result, raw_hands):
         # Atualizar calibração se ativa (thread-safe)

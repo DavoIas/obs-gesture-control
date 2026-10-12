@@ -1,4 +1,4 @@
-from __future__ import annotations
+import os
 import cv2
 import time
 import threading
@@ -49,7 +49,7 @@ class CameraHandler:
                 self.on_frame_callbacks.remove(callback)
 
     def _try_open(self, idx: int) -> Optional[cv2.VideoCapture]:
-        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF] if cv2.os.name == 'nt' else [cv2.CAP_ANY]
+        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF] if os.name == 'nt' else [cv2.CAP_ANY]
         for backend in backends:
             try:
                 cap = cv2.VideoCapture(idx, backend)
@@ -73,19 +73,22 @@ class CameraHandler:
             logger.log(f"Iniciando captura de vídeo na câmera (Dispositivo {target_idx})...")
             self.cap = self._try_open(target_idx)
 
+            self.current_device_index = target_idx
             if not self.cap:
                 logger.log(f"Câmera no índice {target_idx} indisponível ou tela preta. Procurando webcam física ativa...", "WARNING")
-                for alt_idx in [2, 0, 1, 3, 4]:
+                for alt_idx in range(0, 5):
+                    if alt_idx == target_idx:
+                        continue
                     cap_alt = self._try_open(alt_idx)
                     if cap_alt:
                         self.cap = cap_alt
-                        cam_cfg.device_index = alt_idx
-                        config_manager.save()
+                        self.current_device_index = alt_idx
                         logger.log(f"Câmera ativa com imagem real encontrada no índice {alt_idx}!")
+                        event_bus.publish("on_camera_fallback", fallback_index=alt_idx, original_index=target_idx)
                         break
 
             if not self.cap:
-                msg = "Não foi possível abrir nenhuma câmera (testados índices 0 a 3)."
+                msg = "Não foi possível abrir nenhuma câmera (testados índices 0 a 4)."
                 logger.log(msg, "ERROR")
                 event_bus.publish("on_camera_status", active=False, message=msg)
                 return False
@@ -111,7 +114,7 @@ class CameraHandler:
             self._thread = threading.Thread(target=self._process_loop, daemon=True)
             self._thread.start()
 
-            msg = f"Câmera iniciada com sucesso (Dispositivo {cam_cfg.device_index})"
+            msg = f"Câmera iniciada com sucesso (Dispositivo {self.current_device_index})"
             logger.log(msg)
             event_bus.publish("on_camera_status", active=True, message=msg)
             return True

@@ -115,7 +115,7 @@ class OBSConnectionConfig:
 
 @dataclass
 class CameraConfig:
-    device_index: int = 2
+    device_index: int = 0
     target_fps: int = 30
     resolution_width: int = 1280
     resolution_height: int = 720
@@ -135,7 +135,7 @@ class CameraConfig:
         if not isinstance(data, dict):
             return cls()
         return cls(
-            device_index=int(data.get("device_index", 2)),
+            device_index=int(data.get("device_index", 0)),
             target_fps=int(data.get("target_fps", 30)),
             resolution_width=int(data.get("resolution_width", 1280)),
             resolution_height=int(data.get("resolution_height", 720)),
