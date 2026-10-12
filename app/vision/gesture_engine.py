@@ -26,6 +26,7 @@ class GestureEngine:
                 cls._instance.armed: Dict[str, bool] = {}
                 cls._instance.release_counts: Dict[str, int] = {}
                 cls._instance.rearm_frames = 3
+                cls._instance.pending_confirmation = False
             return cls._instance
 
     def process(self, detected_gesture: str, confidence: float) -> Dict[str, Any]:
@@ -107,8 +108,12 @@ class GestureEngine:
                     else:
                         # Verificar se requer confirmação para ação destrutiva
                         if app_cfg.confirm_destructive_actions and action_cfg.confirm_required:
-                            event_bus.publish("on_action_confirm_required", gesture=g_name, action=action_cfg)
-                            action_desc = f"Solicitada confirmação para '{action_cfg.action_type}'"
+                            if not self.pending_confirmation:
+                                self.pending_confirmation = True
+                                event_bus.publish("on_action_confirm_required", gesture=g_name, action=action_cfg)
+                                action_desc = f"Solicitada confirmação para '{action_cfg.action_type}'"
+                            else:
+                                action_desc = f"Confirmação pendente para '{action_cfg.action_type}'"
                         else:
                             success, action_desc = ActionExecutor.execute(action_cfg, gesture_name=g_name)
 

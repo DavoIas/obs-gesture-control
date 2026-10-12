@@ -11,6 +11,7 @@ from app.obs.discovery import obs_discovery
 from app.obs.actions import ActionExecutor
 from app.vision.camera import camera_handler
 from app.vision.calibration import GestureCalibrator
+from app.vision.gesture_engine import gesture_engine
 from app.core.logger import logger
 from app.core.events import event_bus
 
@@ -109,6 +110,21 @@ class GestureEditDialog(ctk.CTkToplevel):
         self.frame_params = ctk.CTkFrame(scroll, fg_color="transparent")
         self.frame_params.pack(fill="x", pady=5)
 
+        # Checkbox "Exigir confirmação" (B5)
+        self.chk_confirm = ctk.CTkCheckBox(scroll, text="Exigir confirmação antes de executar")
+        # TODO(decisão): Default True para stop_stream, stop_record e custom_command, respeitando valor salvo se já configurado
+        initial_act_key = self.action_cfg.action_type
+        if self.action_cfg.confirm_required or (initial_act_key in ["stop_stream", "stop_record", "custom_command"] and getattr(self.action_cfg, 'confirm_required', None) is not False):
+            if self.action_cfg.confirm_required:
+                self.chk_confirm.select()
+            elif initial_act_key in ["stop_stream", "stop_record", "custom_command"]:
+                self.chk_confirm.select()
+            else:
+                self.chk_confirm.deselect()
+        else:
+            self.chk_confirm.deselect()
+        self.chk_confirm.pack(anchor="w", pady=(5, 10))
+
         # Sliders e Parâmetros Numéricos
         ctk.CTkLabel(scroll, text="Cooldown (segundos):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 2))
         self.slider_cooldown = ctk.CTkSlider(scroll, from_=0.2, to=5.0, number_of_steps=48, width=500)
@@ -148,6 +164,12 @@ class GestureEditDialog(ctk.CTkToplevel):
 
     def _on_action_type_changed(self, choice):
         self._render_dynamic_params()
+        act_key = self.action_types_map.get(choice, "switch_scene")
+        if hasattr(self, 'chk_confirm'):
+            if act_key in ["stop_stream", "stop_record", "custom_command"]:
+                self.chk_confirm.select()
+            else:
+                self.chk_confirm.deselect()
 
     def _render_dynamic_params(self):
         for widget in self.frame_params.winfo_children():
@@ -201,7 +223,7 @@ class GestureEditDialog(ctk.CTkToplevel):
         cmd_val = getattr(self, 'entry_cmd', None)
         cmd_str = cmd_val.get() if cmd_val else ""
 
-        confirm_req = act_key in ["stop_stream", "stop_record"]
+        confirm_req = bool(self.chk_confirm.get()) if hasattr(self, 'chk_confirm') else (act_key in ["stop_stream", "stop_record", "custom_command"])
 
         return self.action_cfg.__class__(
             action_type=act_key,
@@ -733,10 +755,26 @@ class MainWindow(ctk.CTk):
 
     def _on_confirm_dialog(self, gesture, action):
         def ask():
+            if getattr(self, '_confirm_dialog_open', False):
+                return
+            self._confirm_dialog_open = True
+            gesture_engine.pending_confirmation = True
+
             top = ctk.CTkToplevel(self)
             top.title("Confirmação de Segurança")
             top.geometry("400x200")
             top.grab_set()
+
+            def close_dialog():
+                self._confirm_dialog_open = False
+                gesture_engine.pending_confirmation = False
+                try:
+                    top.grab_release()
+                    top.destroy()
+                except Exception:
+                    pass
+
+            top.protocol("WM_DELETE_WINDOW", close_dialog)
 
             ctk.CTkLabel(top, text="⚠️ Ação Destrutiva Detectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
             ctk.CTkLabel(top, text=f"Gesto '{gesture}' solicitou a ação '{action.action_type}'.\nConfirma a execução?", wraplength=350).pack(pady=10)
@@ -744,8 +782,16 @@ class MainWindow(ctk.CTk):
             btn_box = ctk.CTkFrame(top, fg_color="transparent")
             btn_box.pack(pady=15)
 
-            ctk.CTkButton(btn_box, text="Sim, Executar", fg_color="#c92a2a", command=lambda: [ActionExecutor.execute(action, gesture), top.destroy()]).pack(side="left", padx=10)
-            ctk.CTkButton(btn_box, text="Cancelar", fg_color="gray40", command=top.destroy).pack(side="right", padx=10)
+            def on_confirm():
+                close_dialog()
+                threading.Thread(
+                    target=ActionExecutor.execute,
+                    args=(action, gesture),
+                    daemon=True
+                ).start()
+
+            ctk.CTkButton(btn_box, text="Sim, Executar", fg_color="#c92a2a", command=on_confirm).pack(side="left", padx=10)
+            ctk.CTkButton(btn_box, text="Cancelar", fg_color="gray40", command=close_dialog).pack(side="right", padx=10)
         self.after(0, ask)
 
     def _on_camera_frame(self, frame, engine_result, raw_hands):
