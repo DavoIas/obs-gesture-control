@@ -118,10 +118,15 @@ class CameraHandler:
             event_bus.publish("on_camera_status", active=False, message=msg)
 
     def _process_loop(self):
+        last_frame_time = time.perf_counter()
+        fps_history = []
+        current_fps = 0.0
+
         while self.is_running and self.cap and self.cap.isOpened():
+            start_loop = time.perf_counter()
             ret, frame = self.cap.read()
             if not ret or frame is None:
-                time.sleep(0.03)
+                time.sleep(0.01)
                 continue
 
             # Espelhamento horizontal para experiência natural do usuário
@@ -156,10 +161,11 @@ class CameraHandler:
 
             # Processar lógica no GestureEngine
             engine_result = gesture_engine.process(detected_gesture, confidence)
+            engine_result["real_fps"] = current_fps
 
             # Desenhar Overlay na Imagem (se ativado)
             if cam_cfg.draw_overlay:
-                self._draw_overlay(frame, engine_result)
+                self._draw_overlay(frame, engine_result, current_fps)
 
             # Notificar listeners de GUI com a cópia do frame
             with self._lock:
@@ -171,10 +177,27 @@ class CameraHandler:
                 except Exception as e:
                     pass
 
-            # Controlar taxa de FPS (ex: 30 FPS => ~0.033s)
-            time.sleep(1.0 / max(10, cam_cfg.target_fps))
+            # Controlar taxa de FPS dormindo apenas o restante do frame interval (T5)
+            elapsed = time.perf_counter() - start_loop
+            target_fps = max(10, cam_cfg.target_fps)
+            frame_interval = 1.0 / target_fps
+            sleep_time = max(0.0, frame_interval - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
-    def _draw_overlay(self, frame: np.ndarray, engine_result: Dict[str, Any]):
+            # Cálculo do FPS real
+            now = time.perf_counter()
+            dt = now - last_frame_time
+            last_frame_time = now
+            if dt > 0:
+                fps_history.append(1.0 / dt)
+                if len(fps_history) > 15:
+                    fps_history.pop(0)
+                current_fps = round(sum(fps_history) / len(fps_history), 1)
+
+            event_bus.publish("on_camera_fps", fps=current_fps)
+
+    def _draw_overlay(self, frame: np.ndarray, engine_result: Dict[str, Any], fps: float = 0.0):
         g_id = engine_result.get("gesture", "unknown")
         conf = engine_result.get("confidence", 0)
         stab = engine_result.get("stability", 0)
@@ -193,6 +216,10 @@ class CameraHandler:
         cv2.rectangle(overlay, (15, 15), (340, 105), (20, 20, 30), -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
         cv2.rectangle(frame, (15, 15), (340, 105), (100, 100, 120), 1)
+
+        # Exibir FPS no canto superior direito do card de overlay
+        if fps > 0:
+            cv2.putText(frame, f"FPS: {fps:.1f}", (245, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (140, 240, 140), 1, cv2.LINE_AA)
 
         if g_id != "unknown":
             color = (140, 240, 140) if consecutive >= req_frames else (230, 210, 100)

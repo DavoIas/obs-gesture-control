@@ -407,6 +407,12 @@ class MainWindow(ctk.CTk):
         self.lbl_cam_icon = ctk.CTkLabel(self.card_cam_status, text="🟢 Câmera Ativa", font=ctk.CTkFont(size=14, weight="bold"))
         self.lbl_cam_icon.pack(padx=15, pady=20)
 
+        # Card de FPS Real (T5)
+        self.card_fps = ctk.CTkFrame(top_cards, width=150, height=75)
+        self.card_fps.pack(side="left", padx=(0, 10))
+        self.lbl_fps_val = ctk.CTkLabel(self.card_fps, text="⚡ FPS: --", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_fps_val.pack(padx=15, pady=20)
+
         # Toggle Modo Teste
         self.switch_test_mode = ctk.CTkSwitch(
             top_cards, text="[ MODO TESTE ]", font=ctk.CTkFont(weight="bold"),
@@ -756,6 +762,13 @@ class MainWindow(ctk.CTk):
         event_bus.subscribe("on_gesture_processed", self._on_gesture_processed)
         event_bus.subscribe("on_log_message", self._on_log_message)
         event_bus.subscribe("on_action_confirm_required", self._on_confirm_dialog)
+        event_bus.subscribe("on_camera_fps", self._on_camera_fps)
+
+    def _on_camera_fps(self, fps: float):
+        def update():
+            if hasattr(self, 'lbl_fps_val'):
+                self.lbl_fps_val.configure(text=f"⚡ FPS: {fps:.1f}")
+        self._ui_queue.put(update)
 
     def _on_obs_status(self, connected: bool, message: str):
         def update():
