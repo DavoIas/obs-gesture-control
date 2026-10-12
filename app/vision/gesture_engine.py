@@ -20,7 +20,7 @@ class GestureEngine:
                 cls._instance = super(GestureEngine, cls).__new__(cls)
                 cls._instance.current_candidate = "unknown"
                 cls._instance.consecutive_count = 0
-                cls._instance.last_triggered_time = 0.0
+                cls._instance.last_triggered: Dict[str, float] = {}
                 cls._instance.recent_confidences = []
                 cls._instance.max_history = 15
                 cls._instance.armed: Dict[str, bool] = {}
@@ -87,9 +87,10 @@ class GestureEngine:
 
             # Se atingiu o número de frames exigido e o cooldown já passou
             is_armed = self.armed.get(detected_gesture, True)
+            last_triggered_for_gesture = self.last_triggered.get(detected_gesture, 0.0)
             if self.consecutive_count >= req_frames and is_armed:
-                if (now - self.last_triggered_time) >= cooldown_sec:
-                    self.last_triggered_time = now
+                if (now - last_triggered_for_gesture) >= cooldown_sec:
+                    self.last_triggered[detected_gesture] = now
                     self.armed[detected_gesture] = False
                     self.release_counts[detected_gesture] = 0
                     self.consecutive_count = 0  # Reseta contador após disparo
