@@ -711,7 +711,24 @@ class MainWindow(ctk.CTk):
         self.switch_overlay = ctk.CTkSwitch(cam_frame, text="Desenhar Painel Overlay no Vídeo", command=self._toggle_overlay)
         if config_manager.config.camera.draw_overlay:
             self.switch_overlay.select()
-        self.switch_overlay.pack(anchor="w", padx=15, pady=(10, 15))
+        self.switch_overlay.pack(anchor="w", padx=15, pady=10)
+
+        # Mão preferida (R6)
+        ctk.CTkLabel(cam_frame, text="Mão Preferida para Reconhecimento:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(15, 2))
+        hand_labels = {"Qualquer mão": "any", "Mão Direita": "right", "Mão Esquerda": "left"}
+        rev_labels = {v: k for k, v in hand_labels.items()}
+        curr_val = rev_labels.get(config_manager.config.camera.preferred_hand, "Qualquer mão")
+        self.combo_pref_hand = ctk.CTkOptionMenu(
+            cam_frame,
+            values=list(hand_labels.keys()),
+            command=lambda choice: self._on_pref_hand_changed(hand_labels.get(choice, "any"))
+        )
+        self.combo_pref_hand.set(curr_val)
+        self.combo_pref_hand.pack(anchor="w", padx=15, pady=(0, 15))
+
+    def _on_pref_hand_changed(self, choice: str):
+        config_manager.config.camera.preferred_hand = choice
+        config_manager.save()
 
     def _on_cam_index_changed(self, choice):
         config_manager.config.camera.device_index = int(choice)

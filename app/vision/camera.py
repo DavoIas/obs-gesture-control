@@ -142,6 +142,7 @@ class CameraHandler:
 
             # Processar mãos com MediaPipe
             raw_hands = []
+            handedness_list = []
             if self.detector.landmarker:
                 try:
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -150,15 +151,29 @@ class CameraHandler:
                     result = self.detector.landmarker.detect(mp_image)
                     if result and result.hand_landmarks:
                         raw_hands = result.hand_landmarks
+                        handedness_list = getattr(result, 'handedness', []) or []
                 except Exception as e:
                     print(f"[Camera] MediaPipe detect error: {e}")
 
             detected_gesture = "unknown"
             confidence = 0.0
 
-            # Reconhecimento da mão primária
+            # Reconhecimento considerando a mão preferida configurada (R6)
             if raw_hands:
-                hand_adapter = HandLandmarksAdapter(raw_hands[0])
+                pref_hand = cam_cfg.preferred_hand.lower()
+                chosen_idx = 0
+                if pref_hand in ["left", "right"] and len(raw_hands) > 1:
+                    for idx in range(len(raw_hands)):
+                        if idx < len(handedness_list) and handedness_list[idx]:
+                            cat = handedness_list[idx][0]
+                            lbl = getattr(cat, 'category_name', getattr(cat, 'display_name', '')).lower()
+                            # Devido ao cv2.flip anterior, a lateralidade física do usuário é invertida
+                            real_hand = "right" if lbl == "left" else ("left" if lbl == "right" else "")
+                            if real_hand == pref_hand:
+                                chosen_idx = idx
+                                break
+
+                hand_adapter = HandLandmarksAdapter(raw_hands[chosen_idx])
                 detected_gesture, confidence = self.recognizer.evaluate_hand(hand_adapter.landmark)
 
                 # Desenhar esqueleto se ativado nas configurações

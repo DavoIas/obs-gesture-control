@@ -21,9 +21,8 @@ Toda a configuração é realizada através da **interface gráfica**, sem a nec
 * **16 Ações Configuráveis + Comando Personalizado (SO).**
 * **Sistema de Perfis Ilimitados:** Crie perfis para *Live Gaming*, *Just Chatting*, *Gravação*, *YouTube*, etc.
 * **Detecção Inteligente & Anti-Oscilação:** Suporte a janela de N frames de confirmação, filtro de estabilidade, cooldown e prioridade de gestos para evitar disparos acidentais.
-* **Modo Teste Seguro:** Teste o reconhecimento dos gestos na webcam sem executar ações reais no OBS.
 * **Ferramenta de Calibração Interativa:** Avalia a iluminação e estabilidade visual em tempo real.
-* **Arquitetura Multi-Mão:** Suporta detecção de até 2 mãos em tempo real 100% local com **Google MediaPipe Tasks**.
+* **Rastreamento de Mãos & Mão Preferida:** Rastreamento em tempo real 100% local com **Google MediaPipe Tasks**, com suporte à escolha de mão preferida (qualquer, esquerda ou direita).
 
 ---
 
