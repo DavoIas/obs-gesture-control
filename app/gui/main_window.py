@@ -1,6 +1,7 @@
 import os
 import cv2
 import threading
+import queue
 from PIL import Image, ImageTk
 import customtkinter as ctk
 from typing import Optional, Dict, Any
@@ -264,15 +265,56 @@ class MainWindow(ctk.CTk):
 
         self.current_page = "dashboard"
         self.calibrator: Optional[GestureCalibrator] = None
+        self._calibrator_lock = threading.Lock()
+
+        # Fila thread-safe de atualizações da interface e controle de frames de vídeo (T3)
+        self._ui_queue: queue.Queue = queue.Queue()
+        self._latest_video_frame = None
+        self._video_frame_lock = threading.Lock()
 
         self._build_layout()
         self._subscribe_events()
+
+        # Iniciar consumo periódico da fila de UI na thread principal
+        self.after(15, self._drain_ui_queue)
 
         # Iniciar Câmera e Tentar Conexão OBS ao iniciar
         if config_manager.config.obs.auto_connect:
             threading.Thread(target=obs_controller.connect, daemon=True).start()
         camera_handler.start()
         camera_handler.add_on_frame_listener(self._on_camera_frame)
+
+    def _drain_ui_queue(self):
+        try:
+            # Processa callbacks pendentes da UI
+            count = 0
+            while not self._ui_queue.empty() and count < 60:
+                cb = self._ui_queue.get_nowait()
+                try:
+                    cb()
+                except Exception as e:
+                    logger.log(f"Erro em callback de UI: {e}", "ERROR")
+                count += 1
+
+            # Processa o último frame de vídeo recebido (evita fila acumulada)
+            with self._video_frame_lock:
+                frame = self._latest_video_frame
+                self._latest_video_frame = None
+
+            if frame is not None and self.current_page == "dashboard" and hasattr(self, 'video_label'):
+                try:
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    img = Image.fromarray(rgb)
+                    img = img.resize((540, 320), Image.Resampling.LANCZOS)
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(540, 320))
+                    self.video_label.configure(image=ctk_img, text="")
+                except Exception:
+                    pass
+        finally:
+            try:
+                self.after(15, self._drain_ui_queue)
+            except Exception:
+                pass
 
     def _build_layout(self):
         self.grid_columnconfigure(1, weight=1)
@@ -662,7 +704,8 @@ class MainWindow(ctk.CTk):
 
     def _start_calibration(self):
         target = self.combo_calib_g.get()
-        self.calibrator = GestureCalibrator(target_gesture=target, sample_goal=30)
+        with self._calibrator_lock:
+            self.calibrator = GestureCalibrator(target_gesture=target, sample_goal=30)
         self.lbl_calib_result.configure(text="Faça o gesto diante da câmera agora...")
 
     def _build_logs_page(self):
@@ -721,14 +764,14 @@ class MainWindow(ctk.CTk):
                 obs_discovery.refresh()
             else:
                 self.lbl_obs_icon.configure(text="🔴 OBS Desconectado", text_color="#c92a2a")
-        self.after(0, update)
+        self._ui_queue.put(update)
 
     def _on_obs_discovery(self, scenes, sources):
         def update():
             text = f"Cenas Disponíveis ({len(scenes)}):\n" + "\n".join([f"  • {s}" for s in scenes]) + "\n\n"
             text += f"Fontes Disponíveis ({len(sources)}):\n" + "\n".join([f"  • {s}" for s in sources])
             self.lbl_obs_discovery_list.configure(text=text)
-        self.after(0, update)
+        self._ui_queue.put(update)
 
     def _on_gesture_processed(self, gesture, confidence, stability, consecutive, required_frames, triggered, action_desc):
         def update():
@@ -744,14 +787,14 @@ class MainWindow(ctk.CTk):
 
                 if triggered:
                     self.lbl_last_action.configure(text=action_desc or f"Gesto {name} ativado!")
-        self.after(0, update)
+        self._ui_queue.put(update)
 
     def _on_log_message(self, log_text, **kwargs):
         def update():
             if hasattr(self, 'textbox_logs'):
                 self.textbox_logs.insert("end", log_text + "\n")
                 self.textbox_logs.see("end")
-        self.after(0, update)
+        self._ui_queue.put(update)
 
     def _on_confirm_dialog(self, gesture, action):
         def ask():
@@ -784,37 +827,33 @@ class MainWindow(ctk.CTk):
 
             def on_confirm():
                 close_dialog()
-                threading.Thread(
-                    target=ActionExecutor.execute,
-                    args=(action, gesture),
-                    daemon=True
-                ).start()
+                ActionExecutor.submit(action, gesture)
 
             ctk.CTkButton(btn_box, text="Sim, Executar", fg_color="#c92a2a", command=on_confirm).pack(side="left", padx=10)
             ctk.CTkButton(btn_box, text="Cancelar", fg_color="gray40", command=close_dialog).pack(side="right", padx=10)
-        self.after(0, ask)
+        self._ui_queue.put(ask)
 
     def _on_camera_frame(self, frame, engine_result, raw_hands):
-        # Atualizar calibração se ativa
-        if self.calibrator and not self.calibrator.is_finished:
-            if raw_hands:
-                finished = self.calibrator.add_frame(raw_hands[0])
-                prog = self.calibrator.get_progress()
-                self.after(0, lambda: self.progress_calib.set(prog))
-                if finished:
-                    res = self.calibrator.analyze()
-                    msg = f"CALIBRAÇÃO CONCLUÍDA!\nQualidade: {res['quality']}\nConfiança Média: {res['avg_confidence']}%\n\nRecomendação: {res['recommendation']}"
-                    self.after(0, lambda: self.lbl_calib_result.configure(text=msg))
-                    self.calibrator = None
+        # Atualizar calibração se ativa (thread-safe)
+        with self._calibrator_lock:
+            calib = self.calibrator
 
-        # Atualizar Vídeo Label no Dashboard
-        if self.current_page == "dashboard" and frame is not None:
-            try:
-                # Redimensionar para o preview do Tkinter
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(rgb)
-                img = img.resize((540, 320), Image.Resampling.LANCZOS)
-                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(540, 320))
-                self.after(0, lambda: self.video_label.configure(image=ctk_img, text=""))
-            except Exception:
-                pass
+        if calib and not calib.is_finished:
+            if raw_hands:
+                finished = calib.add_frame(raw_hands[0])
+                prog = calib.get_progress()
+                self._ui_queue.put(lambda p=prog: self.progress_calib.set(p) if hasattr(self, 'progress_calib') else None)
+                if finished:
+                    res = calib.analyze()
+                    msg = f"CALIBRAÇÃO CONCLUÍDA!\nQualidade: {res['quality']}\nConfiança Média: {res['avg_confidence']}%\n\nRecomendação: {res['recommendation']}"
+                    def finish_calib():
+                        with self._calibrator_lock:
+                            self.calibrator = None
+                        if hasattr(self, 'lbl_calib_result'):
+                            self.lbl_calib_result.configure(text=msg)
+                    self._ui_queue.put(finish_calib)
+
+        # Atualizar o frame mais recente para renderização na thread principal (descarta atrasados)
+        if frame is not None:
+            with self._video_frame_lock:
+                self._latest_video_frame = frame
