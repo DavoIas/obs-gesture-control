@@ -58,11 +58,15 @@ class GestureRecognizer:
         thumb_ext = max(0.0, min(1.0, (thumb_ratio - 0.90) / 0.35))
         thumb_curl = 1.0 - thumb_ext
 
-        thumb_up = (thumb_tip.y < thumb_mcp.y - 0.03) and (thumb_tip.y < wrist.y)
-        thumb_down = (thumb_tip.y > thumb_mcp.y + 0.03) and (thumb_tip.y > wrist.y)
+        # Escala da mão invariante à distância da câmera (R3)
+        palm_size = max(0.01, dist_3d(wrist, middle_mcp))
 
-        # Distância de pinça entre indicador e polegar
+        thumb_up = (thumb_tip.y < thumb_mcp.y - 0.12 * palm_size) and (thumb_tip.y < wrist.y)
+        thumb_down = (thumb_tip.y > thumb_mcp.y + 0.12 * palm_size) and (thumb_tip.y > wrist.y)
+
+        # Distância de pinça normalizada pela escala da mão (R3)
         pinch_dist = dist_3d(thumb_tip, index_tip)
+        norm_pinch = pinch_dist / palm_size
 
         scores: Dict[str, float] = {}
 
@@ -86,8 +90,8 @@ class GestureRecognizer:
             base_score = (ext_idx + ext_mid + ext_rng + ext_pnk + thumb_ext) / 5.0
             scores["open_hand"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 5. FIST (✊): 4 dedos dobrados e polegar não apontado
-        if ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down:
+        # 5. FIST (✊): 4 dedos dobrados, polegar não apontado e não em pinça
+        if ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down and norm_pinch >= 0.32:
             base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_curl) / 5.0
             scores["fist"] = round(0.70 + 0.28 * base_score, 3)
 
@@ -101,9 +105,9 @@ class GestureRecognizer:
             base_score = (ext_idx + ext_pnk + thumb_ext + curl_mid + curl_rng) / 5.0
             scores["love_you"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 8. PINCH (🤏): Ponta do Polegar e Indicador muito próximas
-        if pinch_dist < 0.065:
-            closeness = max(0.0, min(1.0, (0.065 - pinch_dist) / 0.065))
+        # 8. PINCH (🤏): Ponta do Polegar e Indicador muito próximas (normalizado pelo palm_size)
+        if norm_pinch < 0.32:
+            closeness = max(0.0, min(1.0, (0.32 - norm_pinch) / 0.32))
             scores["pinch"] = round(0.75 + 0.23 * closeness, 3)
 
         if not scores:
