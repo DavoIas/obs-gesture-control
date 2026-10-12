@@ -27,6 +27,17 @@ class ActionConfig:
         )
 
 
+KNOWN_GESTURE_IDS = {
+    "peace",
+    "thumbs_up",
+    "thumbs_down",
+    "open_hand",
+    "fist",
+    "point",
+    "love_you",
+    "pinch"
+}
+
 @dataclass
 class GestureConfig:
     gesture_id: str
@@ -49,6 +60,9 @@ class GestureConfig:
     def from_dict(cls, data: Dict[str, Any]) -> 'GestureConfig':
         action_data = data.get("action", {})
         action_obj = ActionConfig.from_dict(action_data)
+        cooldown_val = max(0.0, float(data.get("cooldown", 1.5)))
+        req_frames_val = max(1, min(60, int(data.get("required_frames", 8))))
+        sens_val = max(0, min(100, int(data.get("sensitivity", 75))))
         return cls(
             gesture_id=data.get("gesture_id", "peace"),
             icon=data.get("icon", "✌️"),
@@ -57,9 +71,9 @@ class GestureConfig:
             description=data.get("description", ""),
             active=bool(data.get("active", True)),
             action=action_obj,
-            cooldown=float(data.get("cooldown", 1.5)),
-            required_frames=int(data.get("required_frames", 8)),
-            sensitivity=int(data.get("sensitivity", 75))
+            cooldown=cooldown_val,
+            required_frames=req_frames_val,
+            sensitivity=sens_val
         )
 
 
@@ -83,7 +97,9 @@ class ProfileConfig:
         raw_gestures = data.get("gestures", {})
         gestures_dict = {}
         for k, v in raw_gestures.items():
-            gestures_dict[k] = GestureConfig.from_dict(v)
+            g_id = v.get("gesture_id", k) if isinstance(v, dict) else k
+            if g_id in KNOWN_GESTURE_IDS:
+                gestures_dict[g_id] = GestureConfig.from_dict(v)
         return cls(name=name, description=desc, gestures=gestures_dict)
 
 
@@ -103,9 +119,10 @@ class OBSConnectionConfig:
     def from_dict(cls, data: Dict[str, Any]) -> 'OBSConnectionConfig':
         if not isinstance(data, dict):
             return cls()
+        port_val = max(1, min(65535, int(data.get("port", 4455))))
         return cls(
             host=data.get("host", "localhost"),
-            port=int(data.get("port", 4455)),
+            port=port_val,
             password=str(data.get("password", "123456")),
             auto_connect=bool(data.get("auto_connect", True)),
             auto_reconnect=bool(data.get("auto_reconnect", True)),
@@ -134,9 +151,10 @@ class CameraConfig:
     def from_dict(cls, data: Dict[str, Any]) -> 'CameraConfig':
         if not isinstance(data, dict):
             return cls()
+        target_fps_val = max(5, min(60, int(data.get("target_fps", 30))))
         return cls(
             device_index=int(data.get("device_index", 0)),
-            target_fps=int(data.get("target_fps", 30)),
+            target_fps=target_fps_val,
             resolution_width=int(data.get("resolution_width", 1280)),
             resolution_height=int(data.get("resolution_height", 720)),
             draw_landmarks=bool(data.get("draw_landmarks", True)),
