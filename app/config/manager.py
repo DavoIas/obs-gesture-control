@@ -166,6 +166,32 @@ class ConfigManager:
                 return True
             return False
 
+    def import_profile(self, profile_data: Dict[str, Any]) -> bool:
+        """Importa um perfil externo, desativando custom_command por segurança até revisão manual (H5)."""
+        with self._lock:
+            try:
+                profile = ProfileConfig.from_dict(profile_data)
+                if not profile.name or profile.name in self.config.profiles:
+                    return False
+
+                # Desativa custom_command em perfis importados até o usuário revisar (H5)
+                for g_id, g_cfg in profile.gestures.items():
+                    if g_cfg.action.action_type == "custom_command":
+                        g_cfg.active = False
+                        g_cfg.action.confirm_required = True
+                        logger.log(
+                            f"Gesto '{g_id}' com comando do sistema desativado por segurança no perfil '{profile.name}'.",
+                            "WARNING"
+                        )
+
+                self.config.profiles[profile.name] = profile
+                self._save_unlocked()
+                logger.log(f"Perfil '{profile.name}' importado com sucesso.")
+                return True
+            except Exception as e:
+                logger.log(f"Erro ao importar perfil: {e}", "ERROR")
+                return False
+
     def update_gesture(self, gesture_id: str, updated_gesture: GestureConfig):
         with self._lock:
             active_p = self.get_active_profile()

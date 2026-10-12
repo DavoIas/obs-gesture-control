@@ -109,3 +109,4 @@ python main.py
 ## 🛡️ Privacidade e Segurança Local
 * O processamento de imagem roda **100% LOCALMENTE** em seu computador usando o Google MediaPipe.
 * Nenhuma imagem da webcam ou dado é enviado para a nuvem ou servidores externos.
+* ⚠️ **Aviso de Segurança sobre Comandos do Sistema:** A ação `Comando Personalizado (SO)` executa comandos de terminal com privilégios do seu usuário. Perfis e configurações obtidos de terceiros devem sempre ser revisados com atenção antes de serem executados.

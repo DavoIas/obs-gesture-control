@@ -17,13 +17,16 @@ class ActionConfig:
     def from_dict(cls, data: Dict[str, Any]) -> 'ActionConfig':
         if not isinstance(data, dict):
             return cls()
+        act_type = data.get("action_type", "switch_scene")
+        # Exigir confirmação por padrão para comandos do SO e ações críticas (H5)
+        default_confirm = True if act_type in ["custom_command", "stop_stream", "stop_record"] else False
         return cls(
-            action_type=data.get("action_type", "switch_scene"),
+            action_type=act_type,
             scene_name=data.get("scene_name", ""),
             source_name=data.get("source_name", ""),
             volume_db=float(data.get("volume_db", 0.0)),
             command_str=data.get("command_str", ""),
-            confirm_required=bool(data.get("confirm_required", False))
+            confirm_required=bool(data.get("confirm_required", default_confirm))
         )
 
 

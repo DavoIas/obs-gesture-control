@@ -137,6 +137,7 @@ class ActionExecutor:
                 cmd = action.command_str
                 if not cmd:
                     return False, "Nenhum comando especificado."
+                logger.log(f"Executando comando do sistema via shell: '{cmd}'", "WARNING")
                 subprocess.Popen(cmd, shell=True)
                 msg = f"Comando personalizado executado: '{cmd}'"
 
