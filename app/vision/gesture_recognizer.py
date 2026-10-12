@@ -61,8 +61,20 @@ class GestureRecognizer:
         # Escala da mão invariante à distância da câmera (R3)
         palm_size = max(0.01, dist_3d(wrist, middle_mcp))
 
-        thumb_up = (thumb_tip.y < thumb_mcp.y - 0.12 * palm_size) and (thumb_tip.y < wrist.y)
-        thumb_down = (thumb_tip.y > thumb_mcp.y + 0.12 * palm_size) and (thumb_tip.y > wrist.y)
+        # Vetor do polegar: thumb_mcp -> thumb_tip comparado ao eixo vertical com tolerância angular (R4)
+        dx_thumb = thumb_tip.x - thumb_mcp.x
+        dy_thumb = thumb_tip.y - thumb_mcp.y
+        thumb_len = math.hypot(dx_thumb, dy_thumb)
+        cos_35_deg = math.cos(math.radians(35))
+
+        thumb_up = False
+        thumb_down = False
+        if thumb_len > 0.001 and thumb_ext > 0.45:
+            # Em coordenadas de imagem/vídeo, o eixo Y aponta para baixo (-dy é para cima)
+            cos_up = (-dy_thumb) / thumb_len
+            cos_down = (dy_thumb) / thumb_len
+            thumb_up = (cos_up >= cos_35_deg) and (thumb_tip.y < wrist.y)
+            thumb_down = (cos_down >= cos_35_deg) and (thumb_tip.y > wrist.y)
 
         # Distância de pinça normalizada pela escala da mão (R3)
         pinch_dist = dist_3d(thumb_tip, index_tip)
@@ -75,14 +87,14 @@ class GestureRecognizer:
             base_score = (ext_idx + ext_mid + curl_rng + curl_pnk) / 4.0
             scores["peace"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 2. THUMBS_UP (👍): Polegar para cima; 4 dedos dobrados
+        # 2. THUMBS_UP (👍): Polegar alinhado para cima e estendido; 4 dedos dobrados (R4)
         if thumb_up and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
-            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk) / 4.0
+            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_ext) / 5.0
             scores["thumbs_up"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 3. THUMBS_DOWN (👎): Polegar para baixo; 4 dedos dobrados
+        # 3. THUMBS_DOWN (👎): Polegar alinhado para baixo e estendido; 4 dedos dobrados (R4)
         if thumb_down and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
-            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk) / 4.0
+            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_ext) / 5.0
             scores["thumbs_down"] = round(0.70 + 0.28 * base_score, 3)
 
         # 4. OPEN_HAND (🖐️): Todos os 5 dedos estendidos
