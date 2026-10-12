@@ -11,11 +11,20 @@ class GestureRecognizer:
     """
 
     @staticmethod
-    def is_extended(landmarks, tip_idx: int, pip_idx: int, wrist_idx: int = 0) -> bool:
+    def finger_extension(landmarks, tip_idx: int, pip_idx: int, wrist_idx: int = 0) -> float:
         wrist = landmarks[wrist_idx]
         tip = landmarks[tip_idx]
         pip = landmarks[pip_idx]
-        return dist_3d(tip, wrist) > (dist_3d(pip, wrist) * 1.05)
+        d_tip = dist_3d(tip, wrist)
+        d_pip = dist_3d(pip, wrist)
+        ratio = d_tip / max(0.0001, d_pip)
+        # Mapeamento contínuo: ratio 0.85 (dobrado) a 1.25 (totalmente estendido)
+        score = (ratio - 0.85) / 0.40
+        return max(0.0, min(1.0, score))
+
+    @classmethod
+    def is_extended(cls, landmarks, tip_idx: int, pip_idx: int, wrist_idx: int = 0) -> bool:
+        return cls.finger_extension(landmarks, tip_idx, pip_idx, wrist_idx) >= 0.5
 
     def evaluate_hand(self, landmarks) -> Tuple[str, float]:
         """
@@ -31,15 +40,24 @@ class GestureRecognizer:
         ring_tip, ring_pip, ring_mcp = landmarks[16], landmarks[14], landmarks[13]
         pinky_tip, pinky_pip, pinky_mcp = landmarks[20], landmarks[18], landmarks[17]
 
-        # Estado dos 4 dedos principais (Indicador, Médio, Anelar, Mínimo)
-        idx_ext = self.is_extended(landmarks, 8, 6)
-        mid_ext = self.is_extended(landmarks, 12, 10)
-        rng_ext = self.is_extended(landmarks, 16, 14)
-        pnk_ext = self.is_extended(landmarks, 20, 18)
+        # Extensão contínua dos dedos principais (0.0 a 1.0)
+        ext_idx = self.finger_extension(landmarks, 8, 6)
+        ext_mid = self.finger_extension(landmarks, 12, 10)
+        ext_rng = self.finger_extension(landmarks, 16, 14)
+        ext_pnk = self.finger_extension(landmarks, 20, 18)
 
-        # Estado do Polegar
+        curl_idx = 1.0 - ext_idx
+        curl_mid = 1.0 - ext_mid
+        curl_rng = 1.0 - ext_rng
+        curl_pnk = 1.0 - ext_pnk
+
+        # Estado e extensão contínua do Polegar
         thumb_dist_pinky = dist_3d(thumb_tip, pinky_mcp)
-        thumb_ext = thumb_dist_pinky > (dist_3d(thumb_mcp, pinky_mcp) * 1.10)
+        thumb_mcp_dist_pinky = dist_3d(thumb_mcp, pinky_mcp)
+        thumb_ratio = thumb_dist_pinky / max(0.0001, thumb_mcp_dist_pinky)
+        thumb_ext = max(0.0, min(1.0, (thumb_ratio - 0.90) / 0.35))
+        thumb_curl = 1.0 - thumb_ext
+
         thumb_up = (thumb_tip.y < thumb_mcp.y - 0.03) and (thumb_tip.y < wrist.y)
         thumb_down = (thumb_tip.y > thumb_mcp.y + 0.03) and (thumb_tip.y > wrist.y)
 
@@ -48,38 +66,45 @@ class GestureRecognizer:
 
         scores: Dict[str, float] = {}
 
-        # 1. PEACE (✌️): Indicador e Médio estendidos; Anelar e Mínimo NÃO estendidos
-        if idx_ext and mid_ext and not rng_ext and not pnk_ext:
-            v_spread = dist_3d(index_tip, middle_tip)
-            scores["peace"] = min(0.98, 0.88 + v_spread * 0.5)
+        # 1. PEACE (✌️): Indicador e Médio estendidos; Anelar e Mínimo dobrados
+        if ext_idx > 0.45 and ext_mid > 0.45 and ext_rng < 0.55 and ext_pnk < 0.55:
+            base_score = (ext_idx + ext_mid + curl_rng + curl_pnk) / 4.0
+            scores["peace"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 2. THUMBS_UP (👍): Polegar apontando para cima; 4 dedos dobrados
-        if thumb_up and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
-            scores["thumbs_up"] = 0.96
+        # 2. THUMBS_UP (👍): Polegar para cima; 4 dedos dobrados
+        if thumb_up and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
+            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk) / 4.0
+            scores["thumbs_up"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 3. THUMBS_DOWN (👎): Polegar apontando para baixo; 4 dedos dobrados
-        if thumb_down and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
-            scores["thumbs_down"] = 0.96
+        # 3. THUMBS_DOWN (👎): Polegar para baixo; 4 dedos dobrados
+        if thumb_down and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
+            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk) / 4.0
+            scores["thumbs_down"] = round(0.70 + 0.28 * base_score, 3)
 
         # 4. OPEN_HAND (🖐️): Todos os 5 dedos estendidos
-        if idx_ext and mid_ext and rng_ext and pnk_ext:
-            scores["open_hand"] = 0.96
+        if ext_idx > 0.45 and ext_mid > 0.45 and ext_rng > 0.45 and ext_pnk > 0.45:
+            base_score = (ext_idx + ext_mid + ext_rng + ext_pnk + thumb_ext) / 5.0
+            scores["open_hand"] = round(0.70 + 0.28 * base_score, 3)
 
-        # 5. FIST (✊): Nenhum dos 4 dedos estendido e polegar não apontado
-        if not idx_ext and not mid_ext and not rng_ext and not pnk_ext and not thumb_up and not thumb_down:
-            scores["fist"] = 0.94
+        # 5. FIST (✊): 4 dedos dobrados e polegar não apontado
+        if ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down:
+            base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_curl) / 5.0
+            scores["fist"] = round(0.70 + 0.28 * base_score, 3)
 
         # 6. POINT (☝️): Apenas o Indicador estendido
-        if idx_ext and not mid_ext and not rng_ext and not pnk_ext:
-            scores["point"] = 0.95
+        if ext_idx > 0.45 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
+            base_score = (ext_idx + curl_mid + curl_rng + curl_pnk) / 4.0
+            scores["point"] = round(0.70 + 0.28 * base_score, 3)
 
         # 7. LOVE_YOU (🤟): Indicador, Mínimo e Polegar estendidos; Médio e Anelar dobrados
-        if idx_ext and pnk_ext and thumb_ext and not mid_ext and not rng_ext:
-            scores["love_you"] = 0.96
+        if ext_idx > 0.45 and ext_pnk > 0.45 and thumb_ext > 0.40 and ext_mid < 0.55 and ext_rng < 0.55:
+            base_score = (ext_idx + ext_pnk + thumb_ext + curl_mid + curl_rng) / 5.0
+            scores["love_you"] = round(0.70 + 0.28 * base_score, 3)
 
         # 8. PINCH (🤏): Ponta do Polegar e Indicador muito próximas
         if pinch_dist < 0.065:
-            scores["pinch"] = min(0.98, 0.82 + (0.065 - pinch_dist) * 4.0)
+            closeness = max(0.0, min(1.0, (0.065 - pinch_dist) / 0.065))
+            scores["pinch"] = round(0.75 + 0.23 * closeness, 3)
 
         if not scores:
             return "unknown", 0.0
