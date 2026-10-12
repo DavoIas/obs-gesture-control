@@ -39,12 +39,16 @@ HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17)              # Palma / Articulações
 ]
 
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
 class HandDetector:
     """
     Invoca o MediaPipe HandLandmarker Tasks API localmente para até 2 mãos.
     Fornece renderização nativa em OpenCV do esqueleto 3D e pontos.
     """
-    MODEL_PATH = "hand_landmarker.task"
+    MODEL_PATH = str(ROOT / "hand_landmarker.task")
     MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 
     def __init__(

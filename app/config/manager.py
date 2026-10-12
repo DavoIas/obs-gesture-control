@@ -1,13 +1,43 @@
 import os
 import json
 import threading
+import shutil
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from app.config.models import AppConfig, ProfileConfig, GestureConfig, ActionConfig
 from app.config.defaults import create_default_config, create_default_8_gestures
 from app.core.logger import logger
 from app.core.events import event_bus
 
-CONFIG_FILE_PATH = "config.json"
+ROOT = Path(__file__).resolve().parents[2]
+LOCAL_CONFIG_PATH = ROOT / "config.json"
+
+def get_default_config_path() -> str:
+    """Retorna o caminho do config no diretório do usuário com migração automática do config local (C3)."""
+    try:
+        if os.name == 'nt':
+            appdata = os.environ.get("APPDATA")
+            base_dir = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+            config_dir = base_dir / "obs-gesture-control"
+        else:
+            xdg_config = os.environ.get("XDG_CONFIG_HOME")
+            base_dir = Path(xdg_config) if xdg_config else Path.home() / ".config"
+            config_dir = base_dir / "obs-gesture-control"
+
+        config_dir.mkdir(parents=True, exist_ok=True)
+        user_config_path = config_dir / "config.json"
+
+        # Migração do config.json local se existir
+        if not user_config_path.exists() and LOCAL_CONFIG_PATH.exists():
+            shutil.copy2(LOCAL_CONFIG_PATH, user_config_path)
+            logger.log(f"Configuração local migrada de '{LOCAL_CONFIG_PATH}' para '{user_config_path}'.")
+
+        return str(user_config_path)
+    except Exception as e:
+        logger.log(f"Não foi possível acessar diretório do usuário: {e}. Usando raiz do projeto.", "WARNING")
+        return str(LOCAL_CONFIG_PATH)
+
+CONFIG_FILE_PATH = get_default_config_path()
 
 class ConfigManager:
     """
