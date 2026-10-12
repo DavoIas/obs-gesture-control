@@ -150,6 +150,9 @@ class ActionExecutor:
         except Exception as e:
             err_msg = f"Erro ao executar ação '{act_type}': {e}"
             logger.log(err_msg, "ERROR")
+            err_str = str(e).lower()
+            if isinstance(e, (ConnectionError, OSError)) or any(k in err_str for k in ["connection", "websocket", "closed", "broken pipe", "disconnect", "reset by peer"]):
+                obs_controller.mark_disconnected(f"Queda durante ação '{act_type}': {e}")
             event_bus.publish("on_action_failed", gesture=gesture_name, action=act_type, reason=str(e))
             return False, err_msg
 
