@@ -115,7 +115,8 @@ class GestureEngine:
                             else:
                                 action_desc = f"Confirmação pendente para '{action_cfg.action_type}'"
                         else:
-                            success, action_desc = ActionExecutor.execute(action_cfg, gesture_name=g_name)
+                            ActionExecutor.submit(action_cfg, gesture_name=g_name)
+                            action_desc = f"Ação disparada: '{action_cfg.action_type}'"
 
             event_bus.publish(
                 "on_gesture_processed",

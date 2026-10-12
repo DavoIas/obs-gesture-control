@@ -1,5 +1,6 @@
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Optional
 from app.config.models import ActionConfig
 from app.obs.controller import obs_controller
@@ -10,6 +11,14 @@ class ActionExecutor:
     """
     Executa de forma thread-safe as 16 ações suportadas pelo sistema OBS Gesture Control V2.
     """
+    _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ActionExecutor")
+
+    @classmethod
+    def submit(cls, action: ActionConfig, gesture_name: str = ""):
+        """
+        Enfileira a ação em thread dedicada de forma não-bloqueante.
+        """
+        return cls._executor.submit(cls.execute, action, gesture_name)
 
     @staticmethod
     def execute(action: ActionConfig, gesture_name: str = "") -> Tuple[bool, str]:
