@@ -72,7 +72,12 @@ class ConfigManager:
                 self._ensure_integrity_unlocked()
                 logger.log(f"Configurações carregadas com sucesso! Perfil ativo: '{self.config.active_profile}'")
             except Exception as e:
-                logger.log(f"Erro ao ler '{self.config_path}': {e}. Restaurando configuração padrão segura.", "WARNING")
+                bak_path = f"{self.config_path}.bak"
+                logger.log(f"Erro ao ler '{self.config_path}': {e}. Criando backup em '{bak_path}' e restaurando padrão seguro.", "WARNING")
+                try:
+                    shutil.copy2(self.config_path, bak_path)
+                except Exception as bak_err:
+                    logger.log(f"Falha ao criar backup do config corrompido: {bak_err}", "WARNING")
                 self.config = create_default_config()
                 self._save_unlocked()
 
@@ -83,12 +88,19 @@ class ConfigManager:
             self._save_unlocked()
 
     def _save_unlocked(self):
+        tmp_path = f"{self.config_path}.tmp"
         try:
-            with open(self.config_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.config.to_dict(), f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, self.config_path)
             event_bus.publish("on_config_updated", config=self.config)
         except Exception as e:
             logger.log(f"Erro ao salvar configurações em '{self.config_path}': {e}", "ERROR")
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
     def _ensure_integrity_unlocked(self):
         """Garante que existam perfis e que todos tenham os 8 gestos obrigatórios."""
