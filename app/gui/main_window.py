@@ -309,6 +309,7 @@ class MainWindow(ctk.CTk):
         self.current_page = "dashboard"
         self.calibrator: Optional[GestureCalibrator] = None
         self._calibrator_lock = threading.Lock()
+        self._last_calib_result: Optional[Dict[str, Any]] = None
 
         # Fila thread-safe de atualizações da interface e controle de frames de vídeo (T3)
         self._ui_queue: queue.Queue = queue.Queue()
@@ -765,14 +766,57 @@ class MainWindow(ctk.CTk):
         self.progress_calib.set(0.0)
         self.progress_calib.pack(anchor="w", padx=15, pady=10)
 
-        self.lbl_calib_result = ctk.CTkLabel(card, text="Clique em Iniciar para calibrar o enquadramento e contraste da mão.", wraplength=500)
-        self.lbl_calib_result.pack(anchor="w", padx=15, pady=(10, 15))
+        self.lbl_calib_result = ctk.CTkLabel(card, text="Clique em Iniciar para calibrar o enquadramento e contraste da mão.", wraplength=500, justify="left")
+        self.lbl_calib_result.pack(anchor="w", padx=15, pady=(10, 5))
+
+        self.lbl_calib_suggestions = ctk.CTkLabel(card, text="", wraplength=500, justify="left", font=ctk.CTkFont(weight="bold"))
+        self.lbl_calib_suggestions.pack(anchor="w", padx=15, pady=(0, 10))
+
+        self.btn_apply_calib = ctk.CTkButton(
+            card,
+            text="🎯 Aplicar Sugestão ao Gesto",
+            command=self._apply_calib_suggestion,
+            state="disabled",
+            fg_color="#2b8a3e",
+            hover_color="#237032"
+        )
+        self.btn_apply_calib.pack(anchor="w", padx=15, pady=(0, 10))
+
+        self.lbl_calib_applied_feedback = ctk.CTkLabel(card, text="", text_color="#2b8a3e")
+        self.lbl_calib_applied_feedback.pack(anchor="w", padx=15, pady=(0, 15))
 
     def _start_calibration(self):
         target = self.combo_calib_g.get()
         with self._calibrator_lock:
             self.calibrator = GestureCalibrator(target_gesture=target, sample_goal=30)
-        self.lbl_calib_result.configure(text="Faça o gesto diante da câmera agora...")
+        self._last_calib_result = None
+        self.btn_apply_calib.configure(state="disabled")
+        self.lbl_calib_suggestions.configure(text="")
+        self.lbl_calib_applied_feedback.configure(text="")
+        self.progress_calib.set(0.0)
+        self.lbl_calib_result.configure(text=f"Faça o gesto '{target}' diante da câmera agora...")
+
+    def _apply_calib_suggestion(self):
+        if not self._last_calib_result:
+            return
+        res = self._last_calib_result
+        g_id = res.get("gesture")
+        sens = res.get("suggested_sensitivity")
+        req_frames = res.get("suggested_required_frames")
+
+        profile = config_manager.get_active_profile()
+        if g_id and g_id in profile.gestures:
+            g_cfg = profile.gestures[g_id]
+            g_cfg.sensitivity = sens
+            g_cfg.required_frames = req_frames
+            config_manager.update_gesture(g_id, g_cfg)
+
+            self.lbl_calib_applied_feedback.configure(
+                text=f"✅ Sugestão aplicada com sucesso ao gesto '{g_id}'!\n(Sensibilidade: {sens}%, Confirmação: {req_frames} frames)"
+            )
+            self.btn_apply_calib.configure(state="disabled")
+            if hasattr(self, 'scroll_gestures'):
+                self._refresh_gestures_list()
 
     def _build_logs_page(self):
         page = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -918,12 +962,26 @@ class MainWindow(ctk.CTk):
                 self._ui_queue.put(lambda p=prog: self.progress_calib.set(p) if hasattr(self, 'progress_calib') else None)
                 if finished:
                     res = calib.analyze()
-                    msg = f"CALIBRAÇÃO CONCLUÍDA!\nQualidade: {res['quality']}\nConfiança Média: {res['avg_confidence']}%\n\nRecomendação: {res['recommendation']}"
-                    def finish_calib():
+                    msg = (
+                        f"CALIBRAÇÃO CONCLUÍDA!\n"
+                        f"Qualidade: {res['quality']} | Detecção: {res['matches_pct']}% | Confiança Média: {res['avg_confidence']}%\n\n"
+                        f"Recomendação: {res['recommendation']}"
+                    )
+                    sug_text = (
+                        f"💡 Sugestão para '{res['gesture']}':\n"
+                        f"• Sensibilidade recomendada: {res['suggested_sensitivity']}%\n"
+                        f"• Frames de confirmação recomendados: {res['suggested_required_frames']}"
+                    )
+                    def finish_calib(r=res, m=msg, s=sug_text):
                         with self._calibrator_lock:
                             self.calibrator = None
+                        self._last_calib_result = r
                         if hasattr(self, 'lbl_calib_result'):
-                            self.lbl_calib_result.configure(text=msg)
+                            self.lbl_calib_result.configure(text=m)
+                        if hasattr(self, 'lbl_calib_suggestions'):
+                            self.lbl_calib_suggestions.configure(text=s)
+                        if hasattr(self, 'btn_apply_calib'):
+                            self.btn_apply_calib.configure(state="normal")
                     self._ui_queue.put(finish_calib)
 
         # Atualizar o frame mais recente para renderização na thread principal (descarta atrasados)

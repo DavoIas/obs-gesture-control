@@ -33,10 +33,14 @@ class GestureCalibrator:
     def analyze(self) -> Dict[str, Any]:
         if not self.samples:
             return {
+                "gesture": self.target_gesture,
                 "quality": "Insuficiente",
                 "avg_confidence": 0,
                 "matches_pct": 0,
-                "recommendation": "Nenhum frame válido capturado. Garanta que sua mão está visível."
+                "samples_count": 0,
+                "recommendation": "Nenhum frame válido capturado. Garanta que sua mão está visível.",
+                "suggested_sensitivity": 70,
+                "suggested_required_frames": 6
             }
 
         matches = [s for s in self.samples if s[0] == self.target_gesture]
@@ -55,11 +59,28 @@ class GestureCalibrator:
             quality = "Regular"
             recommendation = "Alta oscilação detectada. Verifique se o contraste com o fundo é bom."
 
+        # Sugestão de sensibilidade e frames por gesto (R7)
+        if confidences:
+            mean_conf = sum(confidences) / len(confidences)
+            # Margem de segurança de ~85% sobre a confiança observada, mantendo entre 45% e 90%
+            suggested_sens = max(45, min(90, int(mean_conf * 100 * 0.85)))
+        else:
+            suggested_sens = 70
+
+        if matches_pct >= 85:
+            suggested_frames = 5
+        elif matches_pct >= 65:
+            suggested_frames = 7
+        else:
+            suggested_frames = 9
+
         return {
             "gesture": self.target_gesture,
             "quality": quality,
             "avg_confidence": avg_conf,
             "matches_pct": matches_pct,
             "samples_count": len(self.samples),
-            "recommendation": recommendation
+            "recommendation": recommendation,
+            "suggested_sensitivity": suggested_sens,
+            "suggested_required_frames": suggested_frames
         }
