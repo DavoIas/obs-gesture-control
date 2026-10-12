@@ -23,6 +23,9 @@ class GestureEngine:
                 cls._instance.last_triggered_time = 0.0
                 cls._instance.recent_confidences = []
                 cls._instance.max_history = 15
+                cls._instance.armed: Dict[str, bool] = {}
+                cls._instance.release_counts: Dict[str, int] = {}
+                cls._instance.rearm_frames = 3
             return cls._instance
 
     def process(self, detected_gesture: str, confidence: float) -> Dict[str, Any]:
@@ -30,6 +33,22 @@ class GestureEngine:
             now = time.time()
             profile = config_manager.get_active_profile()
             app_cfg = config_manager.config
+
+            gesture_cfg = profile.gestures.get(detected_gesture)
+            sensitivity_threshold = (gesture_cfg.sensitivity / 100.0) if gesture_cfg else 0.70
+
+            # Mecanismo soltar para rearmar (B3):
+            # Só rearma um gesto desarmado quando o gesto detectado deixar de ser ele por pelo menos N frames (ex.: 3)
+            active_detection = detected_gesture if (detected_gesture not in ["unknown", "undefined"] and confidence >= sensitivity_threshold) else "unknown"
+            for g, is_armed in list(self.armed.items()):
+                if not is_armed:
+                    if active_detection != g:
+                        self.release_counts[g] = self.release_counts.get(g, 0) + 1
+                        if self.release_counts[g] >= self.rearm_frames:
+                            self.armed[g] = True
+                            self.release_counts[g] = 0
+                    else:
+                        self.release_counts[g] = 0
 
             # Atualizar histórico de confianças para barra de estabilidade (0 - 100%)
             self.recent_confidences.append(confidence if detected_gesture != "unknown" else 0.0)
@@ -39,11 +58,9 @@ class GestureEngine:
             avg_confidence = (sum(self.recent_confidences) / len(self.recent_confidences)) if self.recent_confidences else 0.0
             stability_pct = min(100, int(avg_confidence * 100))
 
-            gesture_cfg = profile.gestures.get(detected_gesture)
             is_active = gesture_cfg.active if gesture_cfg else False
             req_frames = gesture_cfg.required_frames if gesture_cfg else 8
             cooldown_sec = gesture_cfg.cooldown if gesture_cfg else 1.5
-            sensitivity_threshold = (gesture_cfg.sensitivity / 100.0) if gesture_cfg else 0.70
 
             # Caso gesto não esteja configurado, seja desconhecido ou inativo
             if detected_gesture in ["unknown", "undefined"] or not is_active or confidence < sensitivity_threshold:
@@ -69,9 +86,12 @@ class GestureEngine:
             action_desc = ""
 
             # Se atingiu o número de frames exigido e o cooldown já passou
-            if self.consecutive_count >= req_frames:
+            is_armed = self.armed.get(detected_gesture, True)
+            if self.consecutive_count >= req_frames and is_armed:
                 if (now - self.last_triggered_time) >= cooldown_sec:
                     self.last_triggered_time = now
+                    self.armed[detected_gesture] = False
+                    self.release_counts[detected_gesture] = 0
                     self.consecutive_count = 0  # Reseta contador após disparo
                     triggered = True
 
