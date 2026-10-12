@@ -27,16 +27,24 @@ class CameraHandler:
                 cls._instance.cap: Optional[cv2.VideoCapture] = None
                 cls._instance.is_running = False
                 cls._instance._thread: Optional[threading.Thread] = None
-                cam_cfg = config_manager.config.camera
-                cls._instance.detector = HandDetector(
-                    max_hands=cam_cfg.max_hands,
-                    min_detection_confidence=cam_cfg.min_detection_confidence,
-                    min_presence_confidence=cam_cfg.min_presence_confidence,
-                    min_tracking_confidence=cam_cfg.min_tracking_confidence
-                )
+                cls._instance.detector: Optional[HandDetector] = None
                 cls._instance.recognizer = GestureRecognizer()
                 cls._instance.on_frame_callbacks: List[Callable] = []
             return cls._instance
+
+    def _ensure_detector(self):
+        cam_cfg = config_manager.config.camera
+        if (self.detector is None or
+            self.detector.max_hands != cam_cfg.max_hands or
+            self.detector.min_detection_confidence != cam_cfg.min_detection_confidence or
+            self.detector.min_presence_confidence != cam_cfg.min_presence_confidence or
+            self.detector.min_tracking_confidence != cam_cfg.min_tracking_confidence):
+            self.detector = HandDetector(
+                max_hands=cam_cfg.max_hands,
+                min_detection_confidence=cam_cfg.min_detection_confidence,
+                min_presence_confidence=cam_cfg.min_presence_confidence,
+                min_tracking_confidence=cam_cfg.min_tracking_confidence
+            )
 
     def add_on_frame_listener(self, callback: Callable):
         with self._lock:
@@ -98,17 +106,8 @@ class CameraHandler:
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_cfg.resolution_width)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_cfg.resolution_height)
 
-            # Sincronizar detector com max_hands e confianças do config (C1 / R6)
-            if (self.detector.max_hands != cam_cfg.max_hands or
-                self.detector.min_detection_confidence != cam_cfg.min_detection_confidence or
-                self.detector.min_presence_confidence != cam_cfg.min_presence_confidence or
-                self.detector.min_tracking_confidence != cam_cfg.min_tracking_confidence):
-                self.detector = HandDetector(
-                    max_hands=cam_cfg.max_hands,
-                    min_detection_confidence=cam_cfg.min_detection_confidence,
-                    min_presence_confidence=cam_cfg.min_presence_confidence,
-                    min_tracking_confidence=cam_cfg.min_tracking_confidence
-                )
+            # Sincronizar detector com max_hands e confianças do config de forma preguiçosa (H7)
+            self._ensure_detector()
 
             self.is_running = True
             self._thread = threading.Thread(target=self._process_loop, daemon=True)
