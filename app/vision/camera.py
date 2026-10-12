@@ -94,8 +94,19 @@ class CameraHandler:
             return True
 
     def stop(self):
+        thread = None
         with self._lock:
+            if not self.is_running and not self._thread and not self.cap:
+                return
             self.is_running = False
+            thread = self._thread
+            self._thread = None
+
+        # Aguardar encerramento da thread fora do lock para evitar deadlock
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+
+        with self._lock:
             if self.cap:
                 try:
                     self.cap.release()
