@@ -182,16 +182,38 @@ class GestureEditDialog(ctk.CTkToplevel):
         scenes = obs_discovery.get_scenes()
         sources = obs_discovery.get_sources()
 
+        scene_values = scenes if scenes else ["Conecte ao OBS para listar cenas"]
+
         if act_key in ["switch_scene", "enable_source", "disable_source", "toggle_source"]:
             ctk.CTkLabel(self.frame_params, text="Cena:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
-            self.combo_scene = ctk.CTkOptionMenu(self.frame_params, values=scenes, width=500)
-            self.combo_scene.set(self.action_cfg.scene_name if self.action_cfg.scene_name in scenes else (scenes[0] if scenes else ""))
+            self.combo_scene = ctk.CTkComboBox(self.frame_params, values=scene_values, width=500, command=self._on_scene_selected)
+            if self.action_cfg.scene_name:
+                self.combo_scene.set(self.action_cfg.scene_name)
+            elif scenes:
+                self.combo_scene.set(scenes[0])
+            else:
+                self.combo_scene.set("")
             self.combo_scene.pack(anchor="w", pady=(0, 10))
 
         if act_key in ["enable_source", "disable_source", "toggle_source", "set_volume", "mute_source", "unmute_source", "toggle_mute"]:
             ctk.CTkLabel(self.frame_params, text="Fonte:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
-            self.combo_source = ctk.CTkOptionMenu(self.frame_params, values=sources, width=500)
-            self.combo_source.set(self.action_cfg.source_name if self.action_cfg.source_name in sources else (sources[0] if sources else ""))
+            
+            # Para ações de cena, filtra as fontes pela cena selecionada (T6)
+            current_scene = self.combo_scene.get() if hasattr(self, 'combo_scene') else ""
+            if act_key in ["enable_source", "disable_source", "toggle_source"] and current_scene and current_scene != "Conecte ao OBS para listar cenas":
+                scene_sources = obs_discovery.get_scene_sources(current_scene)
+                active_sources = scene_sources if scene_sources else sources
+            else:
+                active_sources = sources
+
+            src_values = active_sources if active_sources else ["Conecte ao OBS para listar fontes"]
+            self.combo_source = ctk.CTkComboBox(self.frame_params, values=src_values, width=500)
+            if self.action_cfg.source_name:
+                self.combo_source.set(self.action_cfg.source_name)
+            elif active_sources:
+                self.combo_source.set(active_sources[0])
+            else:
+                self.combo_source.set("")
             self.combo_source.pack(anchor="w", pady=(0, 10))
 
         if act_key == "set_volume":
@@ -206,20 +228,41 @@ class GestureEditDialog(ctk.CTkToplevel):
             self.entry_cmd.insert(0, self.action_cfg.command_str)
             self.entry_cmd.pack(anchor="w", pady=(0, 10))
 
+    def _on_scene_selected(self, selected_scene: str):
+        if hasattr(self, 'combo_source') and self.combo_source:
+            act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
+            if act_key in ["enable_source", "disable_source", "toggle_source"]:
+                if selected_scene and selected_scene != "Conecte ao OBS para listar cenas":
+                    sources = obs_discovery.get_scene_sources(selected_scene)
+                    if not sources:
+                        sources = obs_discovery.get_sources()
+                    vals = sources if sources else ["Conecte ao OBS para listar fontes"]
+                    self.combo_source.configure(values=vals)
+                    current_val = self.combo_source.get()
+                    if sources and current_val not in sources:
+                        self.combo_source.set(sources[0])
+
     def _test_action(self):
         act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
         test_act = self._build_action_config_from_form(act_key)
-        ActionExecutor.execute(test_act, gesture_name=self.entry_name.get())
+        ActionExecutor.submit(test_act, gesture_name=self.entry_name.get())
 
     def _build_action_config_from_form(self, act_key: str):
         scene_val = getattr(self, 'combo_scene', None)
-        scene_name = scene_val.get() if scene_val else ""
+        scene_name = scene_val.get().strip() if scene_val else ""
+        if scene_name == "Conecte ao OBS para listar cenas":
+            scene_name = ""
 
         source_val = getattr(self, 'combo_source', None)
-        source_name = source_val.get() if source_val else ""
+        source_name = source_val.get().strip() if source_val else ""
+        if source_name == "Conecte ao OBS para listar fontes":
+            source_name = ""
 
         vol_val = getattr(self, 'entry_vol', None)
-        volume_db = float(vol_val.get()) if vol_val and vol_val.get() else 0.0
+        try:
+            volume_db = float(vol_val.get()) if vol_val and vol_val.get() else 0.0
+        except ValueError:
+            volume_db = 0.0
 
         cmd_val = getattr(self, 'entry_cmd', None)
         cmd_str = cmd_val.get() if cmd_val else ""
