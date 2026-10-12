@@ -47,8 +47,17 @@ class HandDetector:
     MODEL_PATH = "hand_landmarker.task"
     MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 
-    def __init__(self, max_hands: int = 2):
+    def __init__(
+        self,
+        max_hands: int = 2,
+        min_detection_confidence: float = 0.5,
+        min_presence_confidence: float = 0.5,
+        min_tracking_confidence: float = 0.5
+    ):
         self.max_hands = max_hands
+        self.min_detection_confidence = min_detection_confidence
+        self.min_presence_confidence = min_presence_confidence
+        self.min_tracking_confidence = min_tracking_confidence
         self.landmarker = None
         self._init_detector()
 
@@ -70,9 +79,9 @@ class HandDetector:
             options = HandLandmarkerOptions(
                 base_options=BaseOptions(model_asset_path=self.MODEL_PATH),
                 num_hands=self.max_hands,
-                min_hand_detection_confidence=0.15,
-                min_hand_presence_confidence=0.15,
-                min_tracking_confidence=0.15
+                min_hand_detection_confidence=self.min_detection_confidence,
+                min_hand_presence_confidence=self.min_presence_confidence,
+                min_tracking_confidence=self.min_tracking_confidence
             )
             self.landmarker = HandLandmarker.create_from_options(options)
             print(f"[HandDetector] Detector de até {self.max_hands} mãos inicializado com sucesso!")

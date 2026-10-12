@@ -27,7 +27,13 @@ class CameraHandler:
                 cls._instance.cap: Optional[cv2.VideoCapture] = None
                 cls._instance.is_running = False
                 cls._instance._thread: Optional[threading.Thread] = None
-                cls._instance.detector = HandDetector(max_hands=2)
+                cam_cfg = config_manager.config.camera
+                cls._instance.detector = HandDetector(
+                    max_hands=cam_cfg.max_hands,
+                    min_detection_confidence=cam_cfg.min_detection_confidence,
+                    min_presence_confidence=cam_cfg.min_presence_confidence,
+                    min_tracking_confidence=cam_cfg.min_tracking_confidence
+                )
                 cls._instance.recognizer = GestureRecognizer()
                 cls._instance.on_frame_callbacks: List[Callable] = []
             return cls._instance

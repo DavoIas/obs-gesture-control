@@ -122,6 +122,10 @@ class CameraConfig:
     draw_landmarks: bool = True
     draw_overlay: bool = True
     max_hands: int = 2
+    min_detection_confidence: float = 0.5
+    min_presence_confidence: float = 0.5
+    min_tracking_confidence: float = 0.5
+    preferred_hand: str = "any"  # "any", "left", "right"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -137,7 +141,11 @@ class CameraConfig:
             resolution_height=int(data.get("resolution_height", 720)),
             draw_landmarks=bool(data.get("draw_landmarks", True)),
             draw_overlay=bool(data.get("draw_overlay", True)),
-            max_hands=int(data.get("max_hands", 2))
+            max_hands=int(data.get("max_hands", 2)),
+            min_detection_confidence=float(data.get("min_detection_confidence", 0.5)),
+            min_presence_confidence=float(data.get("min_presence_confidence", 0.5)),
+            min_tracking_confidence=float(data.get("min_tracking_confidence", 0.5)),
+            preferred_hand=str(data.get("preferred_hand", "any"))
         )
 
 
