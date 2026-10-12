@@ -54,31 +54,31 @@ class GestureRecognizer:
             scores["peace"] = min(0.98, 0.88 + v_spread * 0.5)
 
         # 2. THUMBS_UP (👍): Polegar apontando para cima; 4 dedos dobrados
-        elif thumb_up and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
+        if thumb_up and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
             scores["thumbs_up"] = 0.96
 
         # 3. THUMBS_DOWN (👎): Polegar apontando para baixo; 4 dedos dobrados
-        elif thumb_down and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
+        if thumb_down and not idx_ext and not mid_ext and not rng_ext and not pnk_ext:
             scores["thumbs_down"] = 0.96
 
         # 4. OPEN_HAND (🖐️): Todos os 5 dedos estendidos
-        elif idx_ext and mid_ext and rng_ext and pnk_ext:
+        if idx_ext and mid_ext and rng_ext and pnk_ext:
             scores["open_hand"] = 0.96
 
         # 5. FIST (✊): Nenhum dos 4 dedos estendido e polegar não apontado
-        elif not idx_ext and not mid_ext and not rng_ext and not pnk_ext and not thumb_up and not thumb_down:
+        if not idx_ext and not mid_ext and not rng_ext and not pnk_ext and not thumb_up and not thumb_down:
             scores["fist"] = 0.94
 
         # 6. POINT (☝️): Apenas o Indicador estendido
-        elif idx_ext and not mid_ext and not rng_ext and not pnk_ext:
+        if idx_ext and not mid_ext and not rng_ext and not pnk_ext:
             scores["point"] = 0.95
 
         # 7. LOVE_YOU (🤟): Indicador, Mínimo e Polegar estendidos; Médio e Anelar dobrados
-        elif idx_ext and pnk_ext and thumb_ext and not mid_ext and not rng_ext:
+        if idx_ext and pnk_ext and thumb_ext and not mid_ext and not rng_ext:
             scores["love_you"] = 0.96
 
         # 8. PINCH (🤏): Ponta do Polegar e Indicador muito próximas
-        elif pinch_dist < 0.065:
+        if pinch_dist < 0.065:
             scores["pinch"] = min(0.98, 0.82 + (0.065 - pinch_dist) * 4.0)
 
         if not scores:
