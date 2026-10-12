@@ -101,7 +101,12 @@ class ActionExecutor:
             elif act_type == "set_volume":
                 source = action.source_name
                 vol_db = action.volume_db
-                client.set_input_volume(source, vol_db, None)
+                if vol_db is None or not (-100.0 <= vol_db <= 26.0):
+                    msg = f"Volume inválido: {vol_db}dB. O valor deve estar entre -100 e 26 dB."
+                    logger.log(msg, "WARNING")
+                    event_bus.publish("on_action_failed", gesture=gesture_name, action=act_type, reason=msg)
+                    return False, msg
+                client.set_input_volume(source, vol_db=vol_db)
                 msg = f"Volume da fonte '{source}' alterado para {vol_db}dB"
 
             elif act_type == "mute_source":
