@@ -1,9 +1,10 @@
+from __future__ import annotations
 import cv2
 import time
 import threading
 import numpy as np
 import mediapipe as mp
-from typing import Optional, Callable, List, Tuple, Any
+from typing import Optional, Callable, List, Tuple, Any, Dict
 from app.config.manager import config_manager
 from app.vision.hand_detector import HandDetector, HandLandmarksAdapter
 from app.vision.gesture_recognizer import GestureRecognizer
