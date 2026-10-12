@@ -107,7 +107,7 @@ class ProfileConfig:
 class OBSConnectionConfig:
     host: str = "localhost"
     port: int = 4455
-    password: str = "123456"
+    password: str = ""
     auto_connect: bool = True
     auto_reconnect: bool = True
     reconnect_interval: float = 5.0
@@ -123,7 +123,7 @@ class OBSConnectionConfig:
         return cls(
             host=data.get("host", "localhost"),
             port=port_val,
-            password=str(data.get("password", "123456")),
+            password=str(data.get("password", "")),
             auto_connect=bool(data.get("auto_connect", True)),
             auto_reconnect=bool(data.get("auto_reconnect", True)),
             reconnect_interval=float(data.get("reconnect_interval", 5.0))

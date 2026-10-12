@@ -12,13 +12,17 @@
     "reconnect_interval": 5.0
   },
   "camera": {
-    "device_index": 1,
+    "device_index": 0,
     "target_fps": 30,
     "resolution_width": 1280,
     "resolution_height": 720,
     "draw_landmarks": true,
     "draw_overlay": true,
-    "max_hands": 2
+    "max_hands": 2,
+    "min_detection_confidence": 0.5,
+    "min_presence_confidence": 0.5,
+    "min_tracking_confidence": 0.5,
+    "preferred_hand": "any"
   },
   "profiles": {
     "Live Gaming": {
@@ -34,15 +38,15 @@
           "active": true,
           "action": {
             "action_type": "switch_scene",
-            "scene_name": "Cena 1",
+            "scene_name": "Gameplay",
             "source_name": "",
             "volume_db": 0.0,
             "command_str": "",
             "confirm_required": false
           },
           "cooldown": 1.5,
-          "required_frames": 4,
-          "sensitivity": 60
+          "required_frames": 8,
+          "sensitivity": 75
         },
         "thumbs_up": {
           "gesture_id": "thumbs_up",
@@ -88,7 +92,7 @@
           "default_name": "Open Hand / Mão Aberta",
           "custom_name": "Mutar Microfone",
           "description": "Muta a fonte de áudio do microfone principal.",
-          "active": false,
+          "active": true,
           "action": {
             "action_type": "mute_source",
             "scene_name": "",
@@ -99,7 +103,7 @@
           },
           "cooldown": 1.5,
           "required_frames": 8,
-          "sensitivity": 72
+          "sensitivity": 75
         },
         "fist": {
           "gesture_id": "fist",

@@ -40,7 +40,7 @@ Toda a configuração é realizada através da **interface gráfica**, sem a nec
 1. Abra o **OBS Studio**.
 2. Acesse o menu **Ferramentas** -> **Configurações do Servidor WebSocket**.
 3. Marque a opção **Ativar Servidor WebSocket**.
-4. Anote a **Porta do Servidor** (padrão: `4455`) e defina uma **Senha de Autenticação** (ex: `123456`).
+4. Anote a **Porta do Servidor** (padrão: `4455`) e defina sua **Senha de Autenticação** (ou desative a autenticação caso prefira conexão sem senha).
 
 ---
 

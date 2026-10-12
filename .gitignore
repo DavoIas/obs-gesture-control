@@ -26,3 +26,8 @@ Desktop.ini
 # MediaPipe models
 *.task
 *.task.tmp
+
+# Configuration and user data
+config.json
+config.json.tmp
+config.json.bak
