@@ -259,10 +259,17 @@ class GestureEditDialog(ctk.CTkToplevel):
             source_name = ""
 
         vol_val = getattr(self, 'entry_vol', None)
-        try:
-            volume_db = float(vol_val.get()) if vol_val and vol_val.get() else 0.0
-        except ValueError:
-            volume_db = 0.0
+        volume_db = 0.0
+        if vol_val and vol_val.get().strip():
+            try:
+                volume_db = float(vol_val.get().strip())
+            except ValueError:
+                from tkinter import messagebox
+                messagebox.showwarning(
+                    "Volume Inválido",
+                    f"O valor de volume digitado ('{vol_val.get()}') não é um número decimal válido.\nUtilizando 0.0 dB."
+                )
+                volume_db = 0.0
 
         cmd_val = getattr(self, 'entry_cmd', None)
         cmd_str = cmd_val.get() if cmd_val else ""
