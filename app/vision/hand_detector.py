@@ -41,6 +41,7 @@ HAND_CONNECTIONS = [
 ]
 
 from pathlib import Path
+from app.core.logger import logger
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -82,7 +83,7 @@ class HandDetector:
         if os.path.exists(self.MODEL_PATH):
             if self._verify_sha256(self.MODEL_PATH):
                 return True
-            print(f"[HandDetector] Arquivo existente '{self.MODEL_PATH}' falhou na verificação SHA-256. Baixando novamente...")
+            logger.warning(f"[HandDetector] Arquivo existente '{self.MODEL_PATH}' falhou na verificação SHA-256. Baixando novamente...")
             try:
                 os.remove(self.MODEL_PATH)
             except Exception:
@@ -90,19 +91,19 @@ class HandDetector:
 
         temp_path = f"{self.MODEL_PATH}.tmp"
         try:
-            print(f"[HandDetector] Baixando modelo MediaPipe sob demanda para '{temp_path}'...")
+            logger.info(f"[HandDetector] Baixando modelo MediaPipe sob demanda para '{temp_path}'...")
             urllib.request.urlretrieve(self.MODEL_URL, temp_path)
             if not self._verify_sha256(temp_path):
-                print("[HandDetector] Erro de integridade: SHA-256 do arquivo baixado diverge do esperado.")
+                logger.error("[HandDetector] Erro de integridade: SHA-256 do arquivo baixado diverge do esperado.")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 return False
 
             os.replace(temp_path, self.MODEL_PATH)
-            print("[HandDetector] Modelo MediaPipe verificado e salvo com sucesso!")
+            logger.info("[HandDetector] Modelo MediaPipe verificado e salvo com sucesso!")
             return True
         except Exception as e:
-            print(f"[HandDetector] Erro durante o download ou verificação do modelo: {e}")
+            logger.error(f"[HandDetector] Erro durante o download ou verificação do modelo: {e}")
             if os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
@@ -112,11 +113,11 @@ class HandDetector:
 
     def _init_detector(self):
         if not MP_AVAILABLE:
-            print("[HandDetector] MediaPipe não disponível no ambiente.")
+            logger.warning("[HandDetector] MediaPipe não disponível no ambiente.")
             return
 
         if not self._ensure_model_file():
-            print(f"[HandDetector] Não foi possível obter o modelo validado em '{self.MODEL_PATH}'.")
+            logger.error(f"[HandDetector] Não foi possível obter o modelo validado em '{self.MODEL_PATH}'.")
             return
 
         try:
@@ -128,9 +129,9 @@ class HandDetector:
                 min_tracking_confidence=self.min_tracking_confidence
             )
             self.landmarker = HandLandmarker.create_from_options(options)
-            print(f"[HandDetector] Detector de até {self.max_hands} mãos inicializado com sucesso!")
+            logger.info(f"[HandDetector] Detector de até {self.max_hands} mãos inicializado com sucesso!")
         except Exception as e:
-            print(f"[HandDetector] Falha ao instanciar HandLandmarker: {e}")
+            logger.error(f"[HandDetector] Falha ao instanciar HandLandmarker: {e}")
             self.landmarker = None
 
     def draw_landmarks(self, frame_bgr: np.ndarray, raw_hand_landmarks_list: List[Any]):

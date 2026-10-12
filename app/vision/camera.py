@@ -58,8 +58,8 @@ class CameraHandler:
                     if ret and frame is not None and frame.mean() >= 10.0:
                         return cap
                     cap.release()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Camera] Falha ao testar backend {backend} no dispositivo {idx}: {e}")
         return None
 
     def start(self) -> bool:
@@ -136,8 +136,8 @@ class CameraHandler:
             if self.cap:
                 try:
                     self.cap.release()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[Camera] Falha ao liberar recurso de captura da câmera: {e}")
                 self.cap = None
             msg = "Câmera parada."
             logger.log(msg)
@@ -173,7 +173,7 @@ class CameraHandler:
                         raw_hands = result.hand_landmarks
                         handedness_list = getattr(result, 'handedness', []) or []
                 except Exception as e:
-                    print(f"[Camera] MediaPipe detect error: {e}")
+                    logger.warning(f"[Camera] Erro na detecção do MediaPipe: {e}")
 
             detected_gesture = "unknown"
             confidence = 0.0
@@ -216,7 +216,7 @@ class CameraHandler:
                 try:
                     cb(frame, engine_result, raw_hands)
                 except Exception as e:
-                    pass
+                    logger.debug(f"[Camera] Erro ao executar callback de frame: {e}")
 
             # Controlar taxa de FPS dormindo apenas o restante do frame interval (T5)
             elapsed = time.perf_counter() - start_loop

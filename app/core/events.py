@@ -37,7 +37,11 @@ class EventBus:
             try:
                 callback(**kwargs)
             except Exception as e:
-                print(f"[EventBus] Erro ao disparar callback em '{event_type}': {e}")
+                try:
+                    from app.core.logger import logger
+                    logger.error(f"[EventBus] Erro ao disparar callback em '{event_type}': {e}")
+                except Exception:
+                    pass
 
 # Instância global para importação facilitada
 event_bus = EventBus()
