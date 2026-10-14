@@ -1,4 +1,4 @@
-# 🖐️ OBS Gesture Control V2.0
+#  OBS Gesture Control V2.0
 
 O **OBS Gesture Control V2** é um sistema moderno e robusto de controle por visão computacional para o **OBS Studio**, permitindo alternar cenas, ligar/desligar fontes, controlar volume de áudio, iniciar/pausar transmissões e gravações através de gestos manuais em tempo real diante da webcam.
 
@@ -8,7 +8,7 @@ Toda a configuração é gerenciada através de uma **interface gráfica intuiti
 
 ---
 
-## 🏛️ Arquitetura do Sistema
+##  Arquitetura do Sistema
 
 O projeto é modular e desacoplado através de um barramento de eventos thread-safe:
 
@@ -20,17 +20,17 @@ O projeto é modular e desacoplado através de um barramento de eventos thread-s
 
 ---
 
-## 🚀 Funcionalidades Principais
+##  Funcionalidades Principais
 
 * **8 Gestos Pré-definidos com Pontuação Contínua:**
-  1. ✌️ **Peace (Paz)**
-  2. 👍 **Thumbs Up (Positivo)**
-  3. 👎 **Thumbs Down (Negativo)**
-  4. 🖐️ **Open Hand (Mão Aberta)**
-  5. ✊ **Fist (Punho Fechado)**
-  6. ☝️ **Point (Apontar)**
-  7. 🤟 **Love-You (Rock)**
-  8. 🤏 **Pinch (Pinça)**
+  1. ☝️ One (Número 1)
+  2. ✌️ Two (Número 2)
+  3. 🤟 Three (Número 3)
+  4. 🖖 Four (Número 4)
+  5. 🖐️ Five (Número 5)
+  6. 👍 Thumbs Up (Joia / Positivo)
+  7. 👎 Thumbs Down (Joia para Baixo / Negativo)
+  8. ✊ Fist (Mão Fechada)
 * **Descoberta Automática de Cenas e Fontes do OBS:** Consulta em tempo real das cenas e fontes configuradas.
 * **16 Ações Configuráveis:** Alternância de cenas, controle de visibilidade de fontes, mute/unmute e volume em dB, controle de stream/gravação e comando de terminal (SO).
 * **Mecanismos Anti-Falso Positivo:** Janela de N frames consecutivos de confirmação, filtro "soltar para rearmar" e cooldown independente por gesto.
@@ -93,7 +93,7 @@ python3 -m app
 
 ---
 
-## 🧪 Testes Automatizados e Qualidade de Código
+##  Testes Automatizados e Qualidade de Código
 
 O repositório inclui uma suíte completa de testes unitários e de integração utilizando `pytest` e linter `ruff`:
 
@@ -107,13 +107,9 @@ ruff check .
 
 ---
 
-## 🛡️ Privacidade e Segurança Local
+##  Privacidade e Segurança Local
 
 * O processamento de imagem é executado **100% LOCALMENTE** no seu processador via MediaPipe, sem envio de frames ou dados para servidores externos.
 * ⚠️ **Aviso de Segurança sobre Comandos do Sistema:** A ação `Comando Personalizado (SO)` executa comandos de terminal com privilégios do usuário logado. Configurações e perfis compartilhados por terceiros devem sempre ser revisados antes do uso.
 
 ---
-
-## 📄 Licença
-
-Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
