@@ -85,64 +85,63 @@ def create_synthetic_hand(
 def test_recognizer_all_8_gestures():
     rec = GestureRecognizer()
 
-    # 1. Peace (indicador + médio estendidos, anelar + mínimo dobrados)
-    peace_lm = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False)
-    g, conf = rec.evaluate_hand(peace_lm)
-    assert g == "peace"
+    # 1. "1" (One - apenas indicador estendido)
+    one_lm = create_synthetic_hand(index_ext=True, middle_ext=False, ring_ext=False, pinky_ext=False)
+    g, conf = rec.evaluate_hand(one_lm)
+    assert g == "one"
     assert conf >= 0.70
 
-    # 2. Open Hand (todos estendidos)
-    open_lm = create_synthetic_hand(thumb_ext=True, index_ext=True, middle_ext=True, ring_ext=True, pinky_ext=True)
-    g, conf = rec.evaluate_hand(open_lm)
-    assert g == "open_hand"
+    # 2. "2" (Two - indicador + médio estendidos)
+    two_lm = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False)
+    g, conf = rec.evaluate_hand(two_lm)
+    assert g == "two"
+    assert conf >= 0.70
+
+    # 3. "3" (Three - indicador + médio + anelar estendidos)
+    three_lm = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=True, pinky_ext=False)
+    g, conf = rec.evaluate_hand(three_lm)
+    assert g == "three"
+    assert conf >= 0.70
+
+    # 4. "4" (Four - 4 dedos estendidos, polegar dobrado)
+    four_lm = create_synthetic_hand(thumb_ext=False, index_ext=True, middle_ext=True, ring_ext=True, pinky_ext=True)
+    g, conf = rec.evaluate_hand(four_lm)
+    assert g == "four"
+    assert conf >= 0.70
+
+    # 5. "5" (Five - todos os 5 dedos estendidos e abertos)
+    five_lm = create_synthetic_hand(thumb_ext=True, index_ext=True, middle_ext=True, ring_ext=True, pinky_ext=True)
+    g, conf = rec.evaluate_hand(five_lm)
+    assert g == "five"
     assert conf >= 0.75
 
-    # 3. Fist (todos dobrados)
-    fist_lm = create_synthetic_hand(thumb_ext=False, index_ext=False, middle_ext=False, ring_ext=False, pinky_ext=False)
-    g, conf = rec.evaluate_hand(fist_lm)
-    assert g == "fist"
-    assert conf >= 0.75
-
-    # 4. Point (apenas indicador estendido)
-    point_lm = create_synthetic_hand(index_ext=True, middle_ext=False, ring_ext=False, pinky_ext=False)
-    g, conf = rec.evaluate_hand(point_lm)
-    assert g == "point"
-    assert conf >= 0.70
-
-    # 5. Love-you / Rock (indicador + mínimo estendidos, médio + anelar dobrados)
-    love_lm = create_synthetic_hand(thumb_ext=True, index_ext=True, middle_ext=False, ring_ext=False, pinky_ext=True)
-    g, conf = rec.evaluate_hand(love_lm)
-    assert g == "love_you"
-    assert conf >= 0.70
-
-    # 6. Thumbs Up (polegar vertical para cima, dedos dobrados)
+    # 6. "JOIA" (Thumbs Up - polegar vertical para cima, dedos dobrados)
     t_up_lm = create_synthetic_hand(thumb_up=True, index_ext=False, middle_ext=False, ring_ext=False, pinky_ext=False)
     g, conf = rec.evaluate_hand(t_up_lm)
     assert g == "thumbs_up"
     assert conf >= 0.70
 
-    # 7. Thumbs Down (polegar vertical para baixo, dedos dobrados)
+    # 7. "JOIA PARA BAIXO" (Thumbs Down - polegar vertical para baixo, dedos dobrados)
     t_down_lm = create_synthetic_hand(thumb_down=True, index_ext=False, middle_ext=False, ring_ext=False, pinky_ext=False)
     g, conf = rec.evaluate_hand(t_down_lm)
     assert g == "thumbs_down"
     assert conf >= 0.70
 
-    # 8. Pinch (indicador + polegar colados)
-    pinch_lm = create_synthetic_hand(pinch=True, index_ext=True, thumb_ext=True)
-    g, conf = rec.evaluate_hand(pinch_lm)
-    assert g == "pinch"
-    assert conf >= 0.65
+    # 8. "MÃO FECHADA" (Fist - todos dobrados)
+    fist_lm = create_synthetic_hand(thumb_ext=False, index_ext=False, middle_ext=False, ring_ext=False, pinky_ext=False)
+    g, conf = rec.evaluate_hand(fist_lm)
+    assert g == "fist"
+    assert conf >= 0.75
 
 def test_recognizer_scale_invariance():
     """Testa que uma mão reduzida a 50% do tamanho produz o mesmo gesto e confiança."""
     rec = GestureRecognizer()
 
-    # Peace em escala 1.0 vs escala 0.5
-    peace_normal = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False, scale=1.0)
-    peace_half = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False, scale=0.5)
+    two_normal = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False, scale=1.0)
+    two_half = create_synthetic_hand(index_ext=True, middle_ext=True, ring_ext=False, pinky_ext=False, scale=0.5)
 
-    g1, conf1 = rec.evaluate_hand(peace_normal)
-    g2, conf2 = rec.evaluate_hand(peace_half)
+    g1, conf1 = rec.evaluate_hand(two_normal)
+    g2, conf2 = rec.evaluate_hand(two_half)
 
-    assert g1 == g2 == "peace"
+    assert g1 == g2 == "two"
     assert abs(conf1 - conf2) < 0.05

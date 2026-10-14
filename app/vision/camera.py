@@ -62,8 +62,13 @@ class CameraHandler:
             try:
                 cap = cv2.VideoCapture(idx, backend)
                 if cap and cap.isOpened():
-                    ret, frame = cap.read()
-                    if ret and frame is not None and frame.mean() >= 10.0:
+                    ret, frame = False, None
+                    for _ in range(5):
+                        ret, frame = cap.read()
+                        if ret and frame is not None:
+                            break
+                        time.sleep(0.05)
+                    if ret and frame is not None:
                         return cap
                     cap.release()
             except Exception as e:
@@ -110,6 +115,14 @@ class CameraHandler:
             self._ensure_detector()
 
             self.is_running = True
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    # Garantir que o Windows não suspenda a captura de vídeo em segundo plano/minimizado
+                    ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+                except Exception:
+                    pass
+
             self._thread = threading.Thread(target=self._process_loop, daemon=True)
             self._thread.start()
 
@@ -127,6 +140,13 @@ class CameraHandler:
             thread = self._thread
             self._thread = None
 
+        if os.name == 'nt':
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
+            except Exception:
+                pass
+
         # Aguardar encerramento da thread fora do lock para evitar deadlock
         if thread and thread.is_alive():
             thread.join(timeout=2.0)
@@ -141,6 +161,14 @@ class CameraHandler:
             msg = "Câmera parada."
             logger.log(msg)
             event_bus.publish("on_camera_status", active=False, message=msg)
+
+    def switch_camera(self, new_index: int) -> bool:
+        """Troca de câmera em tempo de execução de forma limpa e thread-safe."""
+        with self._lock:
+            config_manager.config.camera.device_index = new_index
+            config_manager.save()
+        self.stop()
+        return self.start()
 
     def _process_loop(self):
         last_frame_time = time.perf_counter()
@@ -279,3 +307,30 @@ class CameraHandler:
             cv2.putText(frame, "Aguardando Gesto...", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (180, 180, 190), 2, cv2.LINE_AA)
 
 camera_handler = CameraHandler()
+
+def get_available_cameras() -> List[Tuple[int, str]]:
+    """
+    Retorna uma lista de tuplas (indice, nome_amigavel) de todas as câmeras conectadas no sistema.
+    Utiliza pygrabber (DirectShow) no Windows para obter nomes reais, com fallback do OpenCV.
+    """
+    cameras: List[Tuple[int, str]] = []
+    if os.name == 'nt':
+        try:
+            from pygrabber.dshow_graph import FilterGraph
+            graph = FilterGraph()
+            devices = graph.get_input_devices()
+            for idx, name in enumerate(devices):
+                cameras.append((idx, str(name)))
+        except Exception as e:
+            logger.debug(f"[Camera] Falha ao enumerar dispositivos via pygrabber: {e}")
+
+    if not cameras:
+        # Fallback genérico para Windows/Linux/macOS
+        for idx in range(6):
+            cap = cv2.VideoCapture(idx)
+            if cap and cap.isOpened():
+                cameras.append((idx, f"Câmera {idx}"))
+                cap.release()
+
+    return cameras
+

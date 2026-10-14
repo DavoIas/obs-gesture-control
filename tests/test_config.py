@@ -92,3 +92,38 @@ def test_corrupted_config_creates_backup():
         bak = f"{tmp_path}.bak"
         if os.path.exists(bak):
             os.remove(bak)
+
+
+def test_gesture_edit_dialog_save_switching_actions():
+    """Valida se o modal de edição de gestos salva corretamente mesmo ao alternar tipos de ações dinâmicas."""
+    import customtkinter as ctk
+    from app.gui.main_window import GestureEditDialog
+
+    root = ctk.CTk()
+    root.withdraw()
+
+    saved = False
+
+    def on_save():
+        nonlocal saved
+        saved = True
+
+    try:
+        dlg = GestureEditDialog(root, "three", on_save)
+        # Troca para troca de cena
+        dlg.combo_action.set("Trocar cena do OBS")
+        dlg._on_action_type_changed("Trocar cena do OBS")
+
+        # Troca para alternar mute
+        dlg.combo_action.set("Alternar mute")
+        dlg._on_action_type_changed("Alternar mute")
+
+        # Executa save
+        dlg._save()
+        assert saved is True
+
+        active_p = ConfigManager().get_active_profile()
+        assert active_p.gestures["three"].action.action_type == "toggle_mute"
+        assert active_p.gestures["three"].action.source_name == "Mic/Aux"
+    finally:
+        root.destroy()

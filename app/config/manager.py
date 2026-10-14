@@ -93,6 +93,19 @@ class ConfigManager:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.config.to_dict(), f, indent=2, ensure_ascii=False)
             os.replace(tmp_path, self.config_path)
+
+            # Sincroniza também o config.json local da raiz do projeto se existir e for caminho distinto
+            try:
+                resolved_active = Path(self.config_path).resolve()
+                resolved_local = LOCAL_CONFIG_PATH.resolve()
+                if LOCAL_CONFIG_PATH.exists() and resolved_active != resolved_local:
+                    local_tmp = f"{LOCAL_CONFIG_PATH}.tmp"
+                    with open(local_tmp, "w", encoding="utf-8") as f:
+                        json.dump(self.config.to_dict(), f, indent=2, ensure_ascii=False)
+                    os.replace(local_tmp, LOCAL_CONFIG_PATH)
+            except Exception as loc_e:
+                logger.log(f"Aviso ao sincronizar config local: {loc_e}", "DEBUG")
+
             event_bus.publish("on_config_updated", config=self.config)
         except Exception as e:
             logger.log(f"Erro ao salvar configurações em '{self.config_path}': {e}", "ERROR")

@@ -18,6 +18,7 @@ class OBSDiscovery:
                 cls._instance = super(OBSDiscovery, cls).__new__(cls)
                 cls._instance.scenes: List[str] = []
                 cls._instance.sources: List[str] = []
+                cls._instance.audio_sources: List[str] = []
                 cls._instance.scene_sources: Dict[str, List[str]] = {}
             return cls._instance
 
@@ -27,6 +28,7 @@ class OBSDiscovery:
             with self._lock:
                 self.scenes = []
                 self.sources = []
+                self.audio_sources = []
                 self.scene_sources = {}
             event_bus.publish("on_obs_discovery_refreshed", scenes=[], sources=[])
             return False
@@ -44,11 +46,37 @@ class OBSDiscovery:
             # 2. Buscar fontes / entradas reais de áudio e vídeo
             inputs_resp = client.get_input_list()
             sources_list = []
+            audio_sources_list = []
             if hasattr(inputs_resp, 'inputs'):
                 for inp in inputs_resp.inputs:
                     name = inp.get('inputName', '') if isinstance(inp, dict) else getattr(inp, 'input_name', str(inp))
+                    kind = inp.get('inputKind', '') if isinstance(inp, dict) else getattr(inp, 'input_kind', '')
                     if name:
                         sources_list.append(name)
+                        # Identificar se é dispositivo de áudio
+                        try:
+                            client.get_input_mute(name)
+                            audio_sources_list.append(name)
+                        except Exception:
+                            if any(k in kind.lower() for k in ['wasapi', 'audio', 'mic']) or 'mic' in name.lower():
+                                audio_sources_list.append(name)
+
+            # Priorizar microfone principal no topo da lista de áudio
+            special_mic = None
+            try:
+                special = client.get_special_inputs()
+                special_mic = getattr(special, 'mic1', None)
+            except Exception:
+                pass
+
+            if special_mic and special_mic in audio_sources_list:
+                audio_sources_list.remove(special_mic)
+                audio_sources_list.insert(0, special_mic)
+            elif "Mic/Aux" in audio_sources_list:
+                audio_sources_list.remove("Mic/Aux")
+                audio_sources_list.insert(0, "Mic/Aux")
+            elif not audio_sources_list:
+                audio_sources_list = ["Mic/Aux"]
 
             # 3. Preencher scene_sources com get_scene_item_list por cena (T6)
             scene_sources_map: Dict[str, List[str]] = {}
@@ -68,9 +96,10 @@ class OBSDiscovery:
             with self._lock:
                 self.scenes = scenes_list
                 self.sources = sources_list
+                self.audio_sources = audio_sources_list
                 self.scene_sources = scene_sources_map
 
-            logger.log(f"Descoberta do OBS concluída: {len(self.scenes)} cenas e {len(self.sources)} fontes encontradas.")
+            logger.log(f"Descoberta do OBS concluída: {len(self.scenes)} cenas, {len(self.sources)} fontes e {len(self.audio_sources)} dispositivos de áudio encontrados.")
             event_bus.publish("on_obs_discovery_refreshed", scenes=self.scenes, sources=self.sources)
             return True
         except Exception as e:
@@ -88,6 +117,12 @@ class OBSDiscovery:
             if not self.sources and obs_controller.is_connected:
                 self.refresh()
             return list(self.sources)
+
+    def get_audio_sources(self) -> List[str]:
+        with self._lock:
+            if not self.audio_sources and obs_controller.is_connected:
+                self.refresh()
+            return list(self.audio_sources) if self.audio_sources else ["Mic/Aux"]
 
     def get_scene_sources(self, scene_name: str) -> List[str]:
         with self._lock:

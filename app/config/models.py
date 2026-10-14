@@ -31,12 +31,18 @@ class ActionConfig:
 
 
 KNOWN_GESTURE_IDS = {
-    "peace",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
     "thumbs_up",
     "thumbs_down",
-    "open_hand",
     "fist",
+    # Aliases de compatibilidade
+    "peace",
     "point",
+    "open_hand",
     "love_you",
     "pinch"
 }
@@ -175,6 +181,7 @@ class AppConfig:
     active_profile: str = "Live Gaming"
     test_mode: bool = False
     confirm_destructive_actions: bool = True
+    audio_feedback: bool = True
     default_cooldown: float = 1.5
     obs: OBSConnectionConfig = field(default_factory=OBSConnectionConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
@@ -185,6 +192,7 @@ class AppConfig:
             "active_profile": self.active_profile,
             "test_mode": self.test_mode,
             "confirm_destructive_actions": self.confirm_destructive_actions,
+            "audio_feedback": self.audio_feedback,
             "default_cooldown": self.default_cooldown,
             "obs": self.obs.to_dict(),
             "camera": self.camera.to_dict(),
@@ -196,6 +204,7 @@ class AppConfig:
         active_prof = data.get("active_profile", "Live Gaming")
         test_mode = bool(data.get("test_mode", False))
         confirm_dest = bool(data.get("confirm_destructive_actions", True))
+        audio_feed = bool(data.get("audio_feedback", True))
         def_cooldown = float(data.get("default_cooldown", 1.5))
         
         obs_cfg = OBSConnectionConfig.from_dict(data.get("obs", {}))
@@ -210,6 +219,7 @@ class AppConfig:
             active_profile=active_prof,
             test_mode=test_mode,
             confirm_destructive_actions=confirm_dest,
+            audio_feedback=audio_feed,
             default_cooldown=def_cooldown,
             obs=obs_cfg,
             camera=cam_cfg,

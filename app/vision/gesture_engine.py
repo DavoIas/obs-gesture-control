@@ -1,3 +1,4 @@
+import sys
 import time
 import threading
 from typing import Dict, Any, Optional
@@ -6,10 +7,19 @@ from app.obs.actions import ActionExecutor
 from app.core.logger import logger
 from app.core.events import event_bus
 
+def play_trigger_sound():
+    """Toca um bip sutil de confirmação sonora no Windows de forma assíncrona."""
+    try:
+        if sys.platform == "win32":
+            import winsound
+            threading.Thread(target=lambda: winsound.MessageBeep(winsound.MB_OK), daemon=True).start()
+    except Exception:
+        pass
+
 class GestureEngine:
     """
     Motor inteligente de verificação de gestos, estabilidade, cooldown e execução de ações.
-    Aplica janela de confirmação de N frames, filtro anti-oscilação, modo teste e portão de segurança.
+    Aplica janela de confirmação de N frames, filtro anti-oscilação, tolerância a jitter e portão de segurança.
     """
     _instance = None
     _lock = threading.RLock()
@@ -20,6 +30,7 @@ class GestureEngine:
                 cls._instance = super(GestureEngine, cls).__new__(cls)
                 cls._instance.current_candidate = "unknown"
                 cls._instance.consecutive_count = 0
+                cls._instance.missed_frames = 0
                 cls._instance.last_triggered: Dict[str, float] = {}
                 cls._instance.recent_confidences = []
                 cls._instance.max_history = 15
@@ -36,7 +47,7 @@ class GestureEngine:
             app_cfg = config_manager.config
 
             gesture_cfg = profile.gestures.get(detected_gesture)
-            sensitivity_threshold = (gesture_cfg.sensitivity / 100.0) if gesture_cfg else 0.70
+            sensitivity_threshold = (gesture_cfg.sensitivity / 100.0) if gesture_cfg else 0.60
 
             # Mecanismo soltar para rearmar (B3):
             # Só rearma um gesto desarmado quando o gesto detectado deixar de ser ele por pelo menos N frames (ex.: 3)
@@ -60,13 +71,37 @@ class GestureEngine:
             stability_pct = min(100, int(avg_confidence * 100))
 
             is_active = gesture_cfg.active if gesture_cfg else False
-            req_frames = gesture_cfg.required_frames if gesture_cfg else 8
+            req_frames = gesture_cfg.required_frames if gesture_cfg else 4
             cooldown_sec = gesture_cfg.cooldown if gesture_cfg else 1.5
 
-            # Caso gesto não esteja configurado, seja desconhecido ou inativo
-            if detected_gesture in ["unknown", "undefined"] or not is_active or confidence < sensitivity_threshold:
+            is_valid_gesture = (
+                detected_gesture not in ["unknown", "undefined"]
+                and is_active
+                and confidence >= sensitivity_threshold
+            )
+
+            # Caso gesto seja inválido, abaixo do limiar ou inativo
+            if not is_valid_gesture:
+                # Tolerância a oscilação rápida (Grace Period de 1 frame de perda):
+                # Se tínhamos uma contagem em andamento do candidato, não zera imediatamente
+                # ao primeiro frame com queda de confiança ou perda momentânea.
+                if self.current_candidate != "unknown" and self.consecutive_count > 0:
+                    self.missed_frames += 1
+                    if self.missed_frames <= 1:
+                        # Mantém a contagem atual viva por 1 frame
+                        return {
+                            "gesture": self.current_candidate,
+                            "confidence": int(confidence * 100),
+                            "stability": stability_pct,
+                            "consecutive": self.consecutive_count,
+                            "required_frames": req_frames,
+                            "triggered": False
+                        }
+
+                # Mais de 1 frame de perda ou troca de gesto: reseta o progresso
                 self.current_candidate = "unknown"
                 self.consecutive_count = 0
+                self.missed_frames = 0
                 return {
                     "gesture": detected_gesture,
                     "confidence": int(confidence * 100),
@@ -76,7 +111,8 @@ class GestureEngine:
                     "triggered": False
                 }
 
-            # Lógica de contagem consecutiva
+            # Gesto válido detectado
+            self.missed_frames = 0
             if self.current_candidate == detected_gesture:
                 self.consecutive_count += 1
             else:
@@ -99,6 +135,10 @@ class GestureEngine:
 
                     action_cfg = gesture_cfg.action
                     g_name = gesture_cfg.custom_name or gesture_cfg.default_name
+
+                    # Feedback sonoro para confirmação imediata (mesmo minimizado)
+                    if getattr(app_cfg, 'audio_feedback', True):
+                        play_trigger_sound()
 
                     # Verificar Modo Teste
                     if app_cfg.test_mode:

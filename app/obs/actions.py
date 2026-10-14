@@ -108,30 +108,69 @@ class ActionExecutor:
                 msg = "Pausa da gravação alternada!"
 
             elif act_type == "set_volume":
-                source = action.source_name
+                source = ActionExecutor._resolve_audio_input(client, action.source_name)
                 vol_db = action.volume_db
                 if vol_db is None or not (-100.0 <= vol_db <= 26.0):
                     msg = f"Volume inválido: {vol_db}dB. O valor deve estar entre -100 e 26 dB."
                     logger.log(msg, "WARNING")
                     event_bus.publish("on_action_failed", gesture=gesture_name, action=act_type, reason=msg)
                     return False, msg
-                client.set_input_volume(source, vol_db=vol_db)
+                try:
+                    client.set_input_volume(source, vol_db=vol_db)
+                except Exception as e:
+                    fallback = ActionExecutor._get_default_mic(client)
+                    if fallback and fallback != source:
+                        logger.log(f"Falha ao ajustar volume em '{source}'. Tentando '{fallback}'.", "WARNING")
+                        source = fallback
+                        client.set_input_volume(source, vol_db=vol_db)
+                    else:
+                        raise e
                 msg = f"Volume da fonte '{source}' alterado para {vol_db}dB"
 
             elif act_type == "mute_source":
-                source = action.source_name
-                client.set_input_mute(source, True)
+                source = ActionExecutor._resolve_audio_input(client, action.source_name)
+                try:
+                    client.set_input_mute(source, True)
+                except Exception as e:
+                    fallback = ActionExecutor._get_default_mic(client)
+                    if fallback and fallback != source:
+                        logger.log(f"Falha ao mutar '{source}'. Tentando microfone padrão '{fallback}'.", "WARNING")
+                        source = fallback
+                        client.set_input_mute(source, True)
+                    else:
+                        raise e
                 msg = f"Fonte '{source}' mutada!"
 
             elif act_type == "unmute_source":
-                source = action.source_name
-                client.set_input_mute(source, False)
+                source = ActionExecutor._resolve_audio_input(client, action.source_name)
+                try:
+                    client.set_input_mute(source, False)
+                except Exception as e:
+                    fallback = ActionExecutor._get_default_mic(client)
+                    if fallback and fallback != source:
+                        logger.log(f"Falha ao desmutar '{source}'. Tentando microfone padrão '{fallback}'.", "WARNING")
+                        source = fallback
+                        client.set_input_mute(source, False)
+                    else:
+                        raise e
                 msg = f"Fonte '{source}' desmutada!"
 
             elif act_type == "toggle_mute":
-                source = action.source_name
-                client.toggle_input_mute(source)
-                msg = f"Mute da fonte '{source}' alternado!"
+                source = ActionExecutor._resolve_audio_input(client, action.source_name)
+                try:
+                    res = client.toggle_input_mute(source)
+                except Exception as e:
+                    fallback = ActionExecutor._get_default_mic(client)
+                    if fallback and fallback != source:
+                        logger.log(f"Falha ao alternar mute em '{source}'. Tentando microfone padrão '{fallback}'.", "WARNING")
+                        source = fallback
+                        res = client.toggle_input_mute(source)
+                    else:
+                        raise e
+
+                muted = getattr(res, 'input_muted', None)
+                status = "mutada (mudo ativado)" if muted else "desmutada (áudio aberto)"
+                msg = f"Fonte '{source}' {status}!"
 
             elif act_type == "custom_command":
                 cmd = action.command_str
@@ -175,3 +214,22 @@ class ActionExecutor:
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def _get_default_mic(client) -> str:
+        """Descobre o microfone principal configurado no OBS via special inputs."""
+        try:
+            special = client.get_special_inputs()
+            mic = getattr(special, 'mic1', None)
+            if mic:
+                return mic
+        except Exception:
+            pass
+        return "Mic/Aux"
+
+    @staticmethod
+    def _resolve_audio_input(client, requested_name: str) -> str:
+        """Garante que o nome do dispositivo de áudio não seja vazio, retornando o microfone por padrão."""
+        if requested_name and requested_name.strip():
+            return requested_name.strip()
+        return ActionExecutor._get_default_mic(client)

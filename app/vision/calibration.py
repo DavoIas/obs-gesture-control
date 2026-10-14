@@ -68,11 +68,11 @@ class GestureCalibrator:
             suggested_sens = 70
 
         if matches_pct >= 85:
-            suggested_frames = 5
+            suggested_frames = 4
         elif matches_pct >= 65:
-            suggested_frames = 7
+            suggested_frames = 5
         else:
-            suggested_frames = 9
+            suggested_frames = 6
 
         return {
             "gesture": self.target_gesture,

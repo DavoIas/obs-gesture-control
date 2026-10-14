@@ -18,13 +18,13 @@ class GestureRecognizer:
         d_tip = dist_3d(tip, wrist)
         d_pip = dist_3d(pip, wrist)
         ratio = d_tip / max(0.0001, d_pip)
-        # Mapeamento contínuo: ratio 0.85 (dobrado) a 1.25 (totalmente estendido)
-        score = (ratio - 0.85) / 0.40
+        # Mapeamento contínuo: ratio 0.82 (dobrado) a 1.22 (totalmente estendido)
+        score = (ratio - 0.82) / 0.40
         return max(0.0, min(1.0, score))
 
     @classmethod
     def is_extended(cls, landmarks, tip_idx: int, pip_idx: int, wrist_idx: int = 0) -> bool:
-        return cls.finger_extension(landmarks, tip_idx, pip_idx, wrist_idx) >= 0.5
+        return cls.finger_extension(landmarks, tip_idx, pip_idx, wrist_idx) >= 0.45
 
     def evaluate_hand(self, landmarks) -> Tuple[str, float]:
         """
@@ -55,7 +55,7 @@ class GestureRecognizer:
         thumb_dist_pinky = dist_3d(thumb_tip, pinky_mcp)
         thumb_mcp_dist_pinky = dist_3d(thumb_mcp, pinky_mcp)
         thumb_ratio = thumb_dist_pinky / max(0.0001, thumb_mcp_dist_pinky)
-        thumb_ext = max(0.0, min(1.0, (thumb_ratio - 0.90) / 0.35))
+        thumb_ext = max(0.0, min(1.0, (thumb_ratio - 0.88) / 0.35))
         thumb_curl = 1.0 - thumb_ext
 
         # Escala da mão invariante à distância da câmera (R3)
@@ -69,7 +69,7 @@ class GestureRecognizer:
 
         thumb_up = False
         thumb_down = False
-        if thumb_len > 0.001 and thumb_ext > 0.45:
+        if thumb_len > 0.001 and thumb_ext > 0.40:
             # Em coordenadas de imagem/vídeo, o eixo Y aponta para baixo (-dy é para cima)
             cos_up = (-dy_thumb) / thumb_len
             cos_down = (dy_thumb) / thumb_len
@@ -82,46 +82,45 @@ class GestureRecognizer:
 
         scores: Dict[str, float] = {}
 
-        # 1. PEACE (✌️): Indicador e Médio estendidos; Anelar e Mínimo dobrados
-        if ext_idx > 0.45 and ext_mid > 0.45 and ext_rng < 0.55 and ext_pnk < 0.55:
-            base_score = (ext_idx + ext_mid + curl_rng + curl_pnk) / 4.0
-            scores["peace"] = round(0.70 + 0.28 * base_score, 3)
+        # 1. "1" (☝️ / one): Apenas o Indicador estendido
+        if ext_idx > 0.40 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down:
+            base_score = (ext_idx + curl_mid + curl_rng + curl_pnk + thumb_curl) / 5.0
+            scores["one"] = round(0.72 + 0.26 * base_score, 3)
 
-        # 2. THUMBS_UP (👍): Polegar alinhado para cima e estendido; 4 dedos dobrados (R4)
+        # 2. "2" (✌️ / two): Indicador e Médio estendidos; Anelar e Mínimo dobrados
+        if ext_idx > 0.40 and ext_mid > 0.40 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down:
+            base_score = (ext_idx + ext_mid + curl_rng + curl_pnk + thumb_curl) / 5.0
+            scores["two"] = round(0.72 + 0.26 * base_score, 3)
+
+        # 3. "3" (3️⃣ / three): Indicador, Médio e Anelar estendidos; Mínimo dobrado
+        if ext_idx > 0.40 and ext_mid > 0.40 and ext_rng > 0.40 and ext_pnk < 0.55 and not thumb_up and not thumb_down:
+            base_score = (ext_idx + ext_mid + ext_rng + curl_pnk + thumb_curl) / 5.0
+            scores["three"] = round(0.72 + 0.26 * base_score, 3)
+
+        # 4. "4" (4️⃣ / four): 4 dedos estendidos (Indicador, Médio, Anelar, Mínimo); Polegar dobrado sobre a palma
+        if ext_idx > 0.40 and ext_mid > 0.40 and ext_rng > 0.40 and ext_pnk > 0.40 and thumb_ext < 0.55:
+            base_score = (ext_idx + ext_mid + ext_rng + ext_pnk + thumb_curl) / 5.0
+            scores["four"] = round(0.72 + 0.26 * base_score, 3)
+
+        # 5. "5" (🖐️ / five): Todos os 5 dedos estendidos e abertos (inclusive o polegar)
+        if ext_idx > 0.40 and ext_mid > 0.40 and ext_rng > 0.40 and ext_pnk > 0.40 and thumb_ext >= 0.40:
+            base_score = (ext_idx + ext_mid + ext_rng + ext_pnk + thumb_ext) / 5.0
+            scores["five"] = round(0.72 + 0.26 * base_score, 3)
+
+        # 6. "JOIA" (👍 / thumbs_up): Polegar apontando para cima; 4 dedos dobrados
         if thumb_up and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
             base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_ext) / 5.0
-            scores["thumbs_up"] = round(0.70 + 0.28 * base_score, 3)
+            scores["thumbs_up"] = round(0.72 + 0.26 * base_score, 3)
 
-        # 3. THUMBS_DOWN (👎): Polegar alinhado para baixo e estendido; 4 dedos dobrados (R4)
+        # 7. "JOIA PARA BAIXO" (👎 / thumbs_down): Polegar apontando para baixo; 4 dedos dobrados
         if thumb_down and ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55:
             base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_ext) / 5.0
-            scores["thumbs_down"] = round(0.70 + 0.28 * base_score, 3)
+            scores["thumbs_down"] = round(0.72 + 0.26 * base_score, 3)
 
-        # 4. OPEN_HAND (🖐️): Todos os 5 dedos estendidos
-        if ext_idx > 0.45 and ext_mid > 0.45 and ext_rng > 0.45 and ext_pnk > 0.45:
-            base_score = (ext_idx + ext_mid + ext_rng + ext_pnk + thumb_ext) / 5.0
-            scores["open_hand"] = round(0.70 + 0.28 * base_score, 3)
-
-        # 5. FIST (✊): 4 dedos dobrados, polegar não apontado
-        if ext_idx < 0.50 and ext_mid < 0.50 and ext_rng < 0.50 and ext_pnk < 0.50 and not thumb_up and not thumb_down:
+        # 8. "MÃO FECHADA" (✊ / fist): Todos os 4 dedos dobrados e polegar fechado
+        if ext_idx < 0.55 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and not thumb_up and not thumb_down and thumb_ext < 0.55:
             base_score = (curl_idx + curl_mid + curl_rng + curl_pnk + thumb_curl) / 5.0
-            scores["fist"] = round(0.70 + 0.28 * base_score, 3)
-
-        # 6. POINT (☝️): Apenas o Indicador estendido (e não pinçando com o polegar)
-        if ext_idx > 0.45 and ext_mid < 0.55 and ext_rng < 0.55 and ext_pnk < 0.55 and norm_pinch >= 0.28:
-            base_score = (ext_idx + curl_mid + curl_rng + curl_pnk) / 4.0
-            scores["point"] = round(0.70 + 0.28 * base_score, 3)
-
-        # 7. LOVE_YOU (🤟): Indicador, Mínimo e Polegar estendidos; Médio e Anelar dobrados
-        if ext_idx > 0.45 and ext_pnk > 0.45 and thumb_ext > 0.40 and ext_mid < 0.55 and ext_rng < 0.55:
-            base_score = (ext_idx + ext_pnk + thumb_ext + curl_mid + curl_rng) / 5.0
-            scores["love_you"] = round(0.70 + 0.28 * base_score, 3)
-
-        # 8. PINCH (🤏): Ponta do Polegar e Indicador muito próximas, sem que a mão esteja totalmente em punho fechado
-        is_all_curled = (ext_idx < 0.40 and ext_mid < 0.40 and ext_rng < 0.40 and ext_pnk < 0.40)
-        if norm_pinch < 0.30 and not is_all_curled:
-            closeness = max(0.0, min(1.0, (0.30 - norm_pinch) / 0.30))
-            scores["pinch"] = round(0.75 + 0.23 * closeness, 3)
+            scores["fist"] = round(0.72 + 0.26 * base_score, 3)
 
         if not scores:
             return "unknown", 0.0
@@ -131,7 +130,7 @@ class GestureRecognizer:
 
         if len(sorted_scores) > 1:
             second_gesture, second_confidence = sorted_scores[1]
-            if (best_confidence - second_confidence) < 0.08:
+            if (best_confidence - second_confidence) < 0.04:
                 return "undefined", 0.50
 
         return best_gesture, best_confidence

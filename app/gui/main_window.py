@@ -10,7 +10,7 @@ from app.config.manager import config_manager
 from app.obs.controller import obs_controller
 from app.obs.discovery import obs_discovery
 from app.obs.actions import ActionExecutor
-from app.vision.camera import camera_handler
+from app.vision.camera import camera_handler, get_available_cameras
 from app.vision.calibration import GestureCalibrator
 from app.vision.gesture_engine import gesture_engine
 from app.core.logger import logger
@@ -33,6 +33,11 @@ class GestureEditDialog(ctk.CTkToplevel):
         profile = config_manager.get_active_profile()
         self.gesture_cfg = profile.gestures[gesture_id]
         self.action_cfg = self.gesture_cfg.action
+
+        self.combo_scene = None
+        self.combo_source = None
+        self.entry_vol = None
+        self.entry_cmd = None
 
         self.title(f"Editar Gesto - {self.gesture_cfg.icon} {self.gesture_cfg.default_name}")
         self.geometry("560x680")
@@ -136,7 +141,7 @@ class GestureEditDialog(ctk.CTkToplevel):
         self.slider_cooldown.configure(command=lambda val: self.lbl_cooldown_val.configure(text=f"{val:.1f} segundos"))
 
         ctk.CTkLabel(scroll, text="Frames de Confirmação:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
-        self.slider_frames = ctk.CTkSlider(scroll, from_=2, to=20, number_of_steps=18, width=500)
+        self.slider_frames = ctk.CTkSlider(scroll, from_=1, to=20, number_of_steps=19, width=500)
         self.slider_frames.set(self.gesture_cfg.required_frames)
         self.slider_frames.pack(anchor="w")
         self.lbl_frames_val = ctk.CTkLabel(scroll, text=f"{int(self.gesture_cfg.required_frames)} frames")
@@ -144,7 +149,7 @@ class GestureEditDialog(ctk.CTkToplevel):
         self.slider_frames.configure(command=lambda val: self.lbl_frames_val.configure(text=f"{int(val)} frames"))
 
         ctk.CTkLabel(scroll, text="Sensibilidade (%):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
-        self.slider_sens = ctk.CTkSlider(scroll, from_=50, to=95, number_of_steps=45, width=500)
+        self.slider_sens = ctk.CTkSlider(scroll, from_=30, to=95, number_of_steps=65, width=500)
         self.slider_sens.set(self.gesture_cfg.sensitivity)
         self.slider_sens.pack(anchor="w")
         self.lbl_sens_val = ctk.CTkLabel(scroll, text=f"{int(self.gesture_cfg.sensitivity)} %")
@@ -155,10 +160,10 @@ class GestureEditDialog(ctk.CTkToplevel):
         btn_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         btn_frame.pack(fill="x", pady=20)
 
-        btn_test = ctk.CTkButton(btn_frame, text="🧪 Testar Ação Agora", fg_color="gray40", hover_color="gray30", command=self._test_action)
+        btn_test = ctk.CTkButton(btn_frame, text="Testar Ação Agora", fg_color="gray40", hover_color="gray30", command=self._test_action)
         btn_test.pack(side="left", padx=(0, 10))
 
-        btn_save = ctk.CTkButton(btn_frame, text="💾 Salvar Alterações", fg_color="#2b8a3e", hover_color="#237032", command=self._save)
+        btn_save = ctk.CTkButton(btn_frame, text="Salvar Alterações", fg_color="#2b8a3e", hover_color="#237032", command=self._save)
         btn_save.pack(side="right")
 
         self._render_dynamic_params()
@@ -172,9 +177,29 @@ class GestureEditDialog(ctk.CTkToplevel):
             else:
                 self.chk_confirm.deselect()
 
+    def _safe_get(self, widget) -> str:
+        """Lê o valor de um widget Tkinter de forma segura prevenindo TclError se destruído."""
+        if widget is None:
+            return ""
+        try:
+            if hasattr(widget, "winfo_exists") and not widget.winfo_exists():
+                return ""
+            return str(widget.get()).strip()
+        except Exception:
+            return ""
+
     def _render_dynamic_params(self):
         for widget in self.frame_params.winfo_children():
-            widget.destroy()
+            try:
+                widget.destroy()
+            except Exception:
+                pass
+
+        # Resetar referências para evitar TclError em widgets destruídos
+        self.combo_scene = None
+        self.combo_source = None
+        self.entry_vol = None
+        self.entry_cmd = None
 
         selected_label = self.combo_action.get()
         act_key = self.action_types_map.get(selected_label, "switch_scene")
@@ -187,7 +212,7 @@ class GestureEditDialog(ctk.CTkToplevel):
         if act_key in ["switch_scene", "enable_source", "disable_source", "toggle_source"]:
             ctk.CTkLabel(self.frame_params, text="Cena:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
             self.combo_scene = ctk.CTkComboBox(self.frame_params, values=scene_values, width=500, command=self._on_scene_selected)
-            if self.action_cfg.scene_name:
+            if self.action_cfg.scene_name and self.action_cfg.scene_name in scene_values:
                 self.combo_scene.set(self.action_cfg.scene_name)
             elif scenes:
                 self.combo_scene.set(scenes[0])
@@ -195,12 +220,11 @@ class GestureEditDialog(ctk.CTkToplevel):
                 self.combo_scene.set("")
             self.combo_scene.pack(anchor="w", pady=(0, 10))
 
-        if act_key in ["enable_source", "disable_source", "toggle_source", "set_volume", "mute_source", "unmute_source", "toggle_mute"]:
-            ctk.CTkLabel(self.frame_params, text="Fonte:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
-            
-            # Para ações de cena, filtra as fontes pela cena selecionada (T6)
-            current_scene = self.combo_scene.get() if hasattr(self, 'combo_scene') else ""
-            if act_key in ["enable_source", "disable_source", "toggle_source"] and current_scene and current_scene != "Conecte ao OBS para listar cenas":
+        # Ações que atuam sobre fontes de uma cena (vídeo/captura/imagem)
+        if act_key in ["enable_source", "disable_source", "toggle_source"]:
+            ctk.CTkLabel(self.frame_params, text="Fonte da Cena:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
+            current_scene = self._safe_get(self.combo_scene)
+            if current_scene and current_scene != "Conecte ao OBS para listar cenas":
                 scene_sources = obs_discovery.get_scene_sources(current_scene)
                 active_sources = scene_sources if scene_sources else sources
             else:
@@ -208,12 +232,28 @@ class GestureEditDialog(ctk.CTkToplevel):
 
             src_values = active_sources if active_sources else ["Conecte ao OBS para listar fontes"]
             self.combo_source = ctk.CTkComboBox(self.frame_params, values=src_values, width=500)
-            if self.action_cfg.source_name:
+            if self.action_cfg.source_name and self.action_cfg.source_name in src_values:
                 self.combo_source.set(self.action_cfg.source_name)
             elif active_sources:
                 self.combo_source.set(active_sources[0])
             else:
                 self.combo_source.set("")
+            self.combo_source.pack(anchor="w", pady=(0, 10))
+
+        # Ações que atuam sobre canais de áudio e microfone
+        if act_key in ["set_volume", "mute_source", "unmute_source", "toggle_mute"]:
+            ctk.CTkLabel(self.frame_params, text="Dispositivo de Áudio / Microfone:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
+            audio_sources = obs_discovery.get_audio_sources()
+            src_values = audio_sources if audio_sources else ["Mic/Aux"]
+            self.combo_source = ctk.CTkComboBox(self.frame_params, values=src_values, width=500)
+            if self.action_cfg.source_name and self.action_cfg.source_name in src_values:
+                self.combo_source.set(self.action_cfg.source_name)
+            elif "Mic/Aux" in src_values:
+                self.combo_source.set("Mic/Aux")
+            elif src_values:
+                self.combo_source.set(src_values[0])
+            else:
+                self.combo_source.set("Mic/Aux")
             self.combo_source.pack(anchor="w", pady=(0, 10))
 
         if act_key == "set_volume":
@@ -230,76 +270,141 @@ class GestureEditDialog(ctk.CTkToplevel):
 
     def _on_scene_selected(self, selected_scene: str):
         if hasattr(self, 'combo_source') and self.combo_source:
-            act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
-            if act_key in ["enable_source", "disable_source", "toggle_source"]:
-                if selected_scene and selected_scene != "Conecte ao OBS para listar cenas":
-                    sources = obs_discovery.get_scene_sources(selected_scene)
-                    if not sources:
-                        sources = obs_discovery.get_sources()
-                    vals = sources if sources else ["Conecte ao OBS para listar fontes"]
-                    self.combo_source.configure(values=vals)
-                    current_val = self.combo_source.get()
-                    if sources and current_val not in sources:
-                        self.combo_source.set(sources[0])
+            try:
+                if hasattr(self.combo_source, 'winfo_exists') and not self.combo_source.winfo_exists():
+                    return
+                act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
+                if act_key in ["enable_source", "disable_source", "toggle_source"]:
+                    if selected_scene and selected_scene != "Conecte ao OBS para listar cenas":
+                        sources = obs_discovery.get_scene_sources(selected_scene)
+                        if not sources:
+                            sources = obs_discovery.get_sources()
+                        vals = sources if sources else ["Conecte ao OBS para listar fontes"]
+                        self.combo_source.configure(values=vals)
+                        current_val = self._safe_get(self.combo_source)
+                        if sources and current_val not in sources:
+                            self.combo_source.set(sources[0])
+            except Exception as e:
+                logger.log(f"Aviso ao atualizar fontes da cena: {e}", "DEBUG")
 
     def _test_action(self):
-        act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
-        test_act = self._build_action_config_from_form(act_key)
-        ActionExecutor.submit(test_act, gesture_name=self.entry_name.get())
+        try:
+            act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
+            test_act = self._build_action_config_from_form(act_key)
+            name = self._safe_get(getattr(self, 'entry_name', None)) or self.gesture_cfg.custom_name
+            ActionExecutor.submit(test_act, gesture_name=name)
+        except Exception as e:
+            logger.log(f"Erro ao disparar teste de ação: {e}", "ERROR")
 
     def _build_action_config_from_form(self, act_key: str):
-        scene_val = getattr(self, 'combo_scene', None)
-        scene_name = scene_val.get().strip() if scene_val else ""
-        if scene_name == "Conecte ao OBS para listar cenas":
-            scene_name = ""
-
-        source_val = getattr(self, 'combo_source', None)
-        source_name = source_val.get().strip() if source_val else ""
-        if source_name == "Conecte ao OBS para listar fontes":
-            source_name = ""
-
-        vol_val = getattr(self, 'entry_vol', None)
+        scene_name = ""
+        source_name = ""
         volume_db = 0.0
-        if vol_val and vol_val.get().strip():
+        command_str = ""
+
+        if act_key in ["switch_scene", "enable_source", "disable_source", "toggle_source"]:
+            raw_scene = self._safe_get(getattr(self, 'combo_scene', None))
+            if raw_scene and raw_scene != "Conecte ao OBS para listar cenas":
+                scene_name = raw_scene
+
+        if act_key in ["enable_source", "disable_source", "toggle_source"]:
+            raw_src = self._safe_get(getattr(self, 'combo_source', None))
+            if raw_src and raw_src not in ["Conecte ao OBS para listar fontes", "Conecte ao OBS para listar dispositivos"]:
+                source_name = raw_src
+        elif act_key in ["set_volume", "mute_source", "unmute_source", "toggle_mute"]:
+            raw_src = self._safe_get(getattr(self, 'combo_source', None))
+            if raw_src and raw_src not in ["Conecte ao OBS para listar fontes", "Conecte ao OBS para listar dispositivos"]:
+                source_name = raw_src
+            else:
+                source_name = "Mic/Aux"
+
+        if act_key == "set_volume":
+            vol_str = self._safe_get(getattr(self, 'entry_vol', None))
+            if vol_str:
+                try:
+                    volume_db = float(vol_str)
+                except ValueError:
+                    from tkinter import messagebox
+                    messagebox.showwarning(
+                        "Volume Inválido",
+                        f"O valor de volume digitado ('{vol_str}') não é um número decimal válido.\nUtilizando 0.0 dB."
+                    )
+                    volume_db = 0.0
+
+        if act_key == "custom_command":
+            command_str = self._safe_get(getattr(self, 'entry_cmd', None))
+
+        confirm_req = False
+        if hasattr(self, 'chk_confirm'):
             try:
-                volume_db = float(vol_val.get().strip())
-            except ValueError:
-                from tkinter import messagebox
-                messagebox.showwarning(
-                    "Volume Inválido",
-                    f"O valor de volume digitado ('{vol_val.get()}') não é um número decimal válido.\nUtilizando 0.0 dB."
-                )
-                volume_db = 0.0
-
-        cmd_val = getattr(self, 'entry_cmd', None)
-        cmd_str = cmd_val.get() if cmd_val else ""
-
-        confirm_req = bool(self.chk_confirm.get()) if hasattr(self, 'chk_confirm') else (act_key in ["stop_stream", "stop_record", "custom_command"])
+                confirm_req = bool(self.chk_confirm.get())
+            except Exception:
+                confirm_req = (act_key in ["stop_stream", "stop_record", "custom_command"])
+        else:
+            confirm_req = (act_key in ["stop_stream", "stop_record", "custom_command"])
 
         return self.action_cfg.__class__(
             action_type=act_key,
             scene_name=scene_name,
             source_name=source_name,
             volume_db=volume_db,
-            command_str=cmd_str,
+            command_str=command_str,
             confirm_required=confirm_req
         )
 
     def _save(self):
-        act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
-        new_action = self._build_action_config_from_form(act_key)
+        try:
+            act_key = self.action_types_map.get(self.combo_action.get(), "switch_scene")
+            new_action = self._build_action_config_from_form(act_key)
 
-        self.gesture_cfg.custom_name = self.entry_name.get()
-        self.gesture_cfg.description = self.entry_desc.get()
-        self.gesture_cfg.active = bool(self.switch_active.get())
-        self.gesture_cfg.cooldown = round(self.slider_cooldown.get(), 1)
-        self.gesture_cfg.required_frames = int(self.slider_frames.get())
-        self.gesture_cfg.sensitivity = int(self.slider_sens.get())
-        self.gesture_cfg.action = new_action
+            custom_name = self._safe_get(getattr(self, 'entry_name', None))
+            if custom_name:
+                self.gesture_cfg.custom_name = custom_name
 
-        config_manager.update_gesture(self.gesture_id, self.gesture_cfg)
-        self.on_save_callback()
-        self.destroy()
+            desc = self._safe_get(getattr(self, 'entry_desc', None))
+            if desc:
+                self.gesture_cfg.description = desc
+
+            if hasattr(self, 'switch_active'):
+                try:
+                    self.gesture_cfg.active = bool(self.switch_active.get())
+                except Exception:
+                    pass
+
+            if hasattr(self, 'slider_cooldown'):
+                try:
+                    self.gesture_cfg.cooldown = round(float(self.slider_cooldown.get()), 1)
+                except Exception:
+                    pass
+
+            if hasattr(self, 'slider_frames'):
+                try:
+                    self.gesture_cfg.required_frames = int(self.slider_frames.get())
+                except Exception:
+                    pass
+
+            if hasattr(self, 'slider_sens'):
+                try:
+                    self.gesture_cfg.sensitivity = int(self.slider_sens.get())
+                except Exception:
+                    pass
+
+            self.gesture_cfg.action = new_action
+
+            config_manager.update_gesture(self.gesture_id, self.gesture_cfg)
+            logger.log(f"Gesto '{self.gesture_id}' atualizado e salvo com sucesso! Nova ação: {act_key}")
+
+            if callable(self.on_save_callback):
+                self.on_save_callback()
+
+            self.destroy()
+        except Exception as e:
+            logger.log(f"Erro ao salvar configurações do gesto '{self.gesture_id}': {e}", "ERROR")
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Erro ao Salvar",
+                f"Ocorreu um erro ao salvar as alterações do gesto:\n{e}"
+            )
 
 
 class MainWindow(ctk.CTk):
@@ -323,7 +428,9 @@ class MainWindow(ctk.CTk):
         self._latest_video_frame = None
         self._video_frame_lock = threading.Lock()
 
+        self._camera_devices_cache = []
         self._build_layout()
+        self._refresh_camera_devices_list()
         self._subscribe_events()
 
         # Iniciar consumo periódico da fila de UI na thread principal
@@ -352,7 +459,8 @@ class MainWindow(ctk.CTk):
                 frame = self._latest_video_frame
                 self._latest_video_frame = None
 
-            if frame is not None and self.current_page == "dashboard" and hasattr(self, 'video_label'):
+            is_minimized = (self.state() == "iconic")
+            if not is_minimized and frame is not None and self.current_page == "dashboard" and hasattr(self, 'video_label'):
                 try:
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     img = Image.fromarray(rgb)
@@ -377,34 +485,39 @@ class MainWindow(ctk.CTk):
 
         lbl_logo = ctk.CTkLabel(
             self.sidebar,
-            text="🖐️ OBS Gesture V2",
+            text="OBS Gesture V2",
             font=ctk.CTkFont(size=18, weight="bold")
         )
-        lbl_logo.pack(padx=20, pady=(20, 20))
+        lbl_logo.pack(padx=20, pady=(20, 20), anchor="w")
 
-        self.btn_nav_dashboard = ctk.CTkButton(self.sidebar, text="📊 Dashboard", anchor="w", command=lambda: self.show_page("dashboard"))
-        self.btn_nav_dashboard.pack(fill="x", padx=10, pady=4)
+        self.nav_buttons: Dict[str, ctk.CTkButton] = {}
 
-        self.btn_nav_gestures = ctk.CTkButton(self.sidebar, text="✌️ Gestos (8/8)", anchor="w", command=lambda: self.show_page("gestures"))
-        self.btn_nav_gestures.pack(fill="x", padx=10, pady=4)
+        nav_items = [
+            ("dashboard", "Dashboard"),
+            ("gestures", "Gestos (8/8)"),
+            ("profiles", "Perfis"),
+            ("obs", "OBS Studio"),
+            ("camera", "Câmera"),
+            ("calibration", "Calibração"),
+            ("logs", "Logs"),
+            ("settings", "Configurações"),
+        ]
 
-        self.btn_nav_profiles = ctk.CTkButton(self.sidebar, text="👤 Perfis", anchor="w", command=lambda: self.show_page("profiles"))
-        self.btn_nav_profiles.pack(fill="x", padx=10, pady=4)
-
-        self.btn_nav_obs = ctk.CTkButton(self.sidebar, text="🎥 OBS Studio", anchor="w", command=lambda: self.show_page("obs"))
-        self.btn_nav_obs.pack(fill="x", padx=10, pady=4)
-
-        self.btn_nav_camera = ctk.CTkButton(self.sidebar, text="📷 Câmera", anchor="w", command=lambda: self.show_page("camera"))
-        self.btn_nav_camera.pack(fill="x", padx=10, pady=4)
-
-        self.btn_nav_calibration = ctk.CTkButton(self.sidebar, text="🎯 Calibração", anchor="w", command=lambda: self.show_page("calibration"))
-        self.btn_nav_calibration.pack(fill="x", padx=10, pady=4)
-
-        self.btn_nav_logs = ctk.CTkButton(self.sidebar, text="📝 Logs", anchor="w", command=lambda: self.show_page("logs"))
-        self.btn_nav_logs.pack(fill="x", padx=10, pady=4)
-
-        self.btn_nav_settings = ctk.CTkButton(self.sidebar, text="⚙️ Configurações", anchor="w", command=lambda: self.show_page("settings"))
-        self.btn_nav_settings.pack(fill="x", padx=10, pady=4)
+        for page_key, label_text in nav_items:
+            btn = ctk.CTkButton(
+                self.sidebar,
+                text=label_text,
+                anchor="w",
+                height=36,
+                corner_radius=8,
+                fg_color="transparent",
+                text_color=("gray20", "gray85"),
+                hover_color=("gray80", "#2c3e50"),
+                command=lambda pk=page_key: self.show_page(pk)
+            )
+            btn.pack(fill="x", padx=10, pady=3)
+            self.nav_buttons[page_key] = btn
+            setattr(self, f"btn_nav_{page_key}", btn)
 
         # Rodapé da sidebar
         lbl_ver = ctk.CTkLabel(self.sidebar, text="Versão 2.0 (Zero-Code)", font=ctk.CTkFont(size=11), text_color="gray60")
@@ -438,6 +551,21 @@ class MainWindow(ctk.CTk):
             else:
                 frame.grid_forget()
 
+        # Atualizar destaque visual do botão ativo na barra lateral
+        for name, btn in getattr(self, "nav_buttons", {}).items():
+            if name == page_name:
+                btn.configure(
+                    fg_color="#1f6aa5",
+                    text_color="#ffffff",
+                    font=ctk.CTkFont(size=13, weight="bold")
+                )
+            else:
+                btn.configure(
+                    fg_color="transparent",
+                    text_color=("gray20", "gray85"),
+                    font=ctk.CTkFont(size=13, weight="normal")
+                )
+
     # ==================== PAGE BUILDERS ====================
 
     def _build_dashboard_page(self):
@@ -450,18 +578,18 @@ class MainWindow(ctk.CTk):
 
         self.card_obs_status = ctk.CTkFrame(top_cards, width=220, height=75)
         self.card_obs_status.pack(side="left", padx=(0, 10))
-        self.lbl_obs_icon = ctk.CTkLabel(self.card_obs_status, text="🔴 OBS Desconectado", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_obs_icon = ctk.CTkLabel(self.card_obs_status, text="● OBS Desconectado", text_color="#c92a2a", font=ctk.CTkFont(size=14, weight="bold"))
         self.lbl_obs_icon.pack(padx=15, pady=20)
 
         self.card_cam_status = ctk.CTkFrame(top_cards, width=220, height=75)
         self.card_cam_status.pack(side="left", padx=(0, 10))
-        self.lbl_cam_icon = ctk.CTkLabel(self.card_cam_status, text="🟢 Câmera Ativa", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_cam_icon = ctk.CTkLabel(self.card_cam_status, text="● Câmera Ativa", text_color="#2b8a3e", font=ctk.CTkFont(size=14, weight="bold"))
         self.lbl_cam_icon.pack(padx=15, pady=20)
 
         # Card de FPS Real (T5)
         self.card_fps = ctk.CTkFrame(top_cards, width=150, height=75)
         self.card_fps.pack(side="left", padx=(0, 10))
-        self.lbl_fps_val = ctk.CTkLabel(self.card_fps, text="⚡ FPS: --", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_fps_val = ctk.CTkLabel(self.card_fps, text="FPS: --", font=ctk.CTkFont(size=14, weight="bold"))
         self.lbl_fps_val.pack(padx=15, pady=20)
 
         # Toggle Modo Teste
@@ -483,7 +611,28 @@ class MainWindow(ctk.CTk):
         # Live Video Preview Canvas
         video_card = ctk.CTkFrame(center_grid)
         video_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        ctk.CTkLabel(video_card, text="Preview da Webcam + Overlay", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=10)
+
+        # Cabeçalho com Menu Cascata de Câmeras
+        video_header = ctk.CTkFrame(video_card, fg_color="transparent")
+        video_header.pack(fill="x", padx=15, pady=(10, 6))
+
+        ctk.CTkLabel(video_header, text="Câmera:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 8))
+
+        self.dash_combo_camera = ctk.CTkOptionMenu(
+            video_header,
+            values=["Buscando câmeras..."],
+            width=260,
+            command=self._on_camera_selected_from_menu
+        )
+        self.dash_combo_camera.pack(side="left", padx=(0, 6))
+
+        btn_dash_refresh_cam = ctk.CTkButton(
+            video_header,
+            text="Atualizar",
+            width=80,
+            command=self._refresh_camera_devices_list
+        )
+        btn_dash_refresh_cam.pack(side="left")
 
         self.video_label = ctk.CTkLabel(video_card, text="Carregando vídeo...")
         self.video_label.pack(fill="both", expand=True, padx=15, pady=(0, 15))
@@ -494,7 +643,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(gesture_card, text="Painel de Monitoramento", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=15, pady=10)
 
-        self.lbl_active_gesture = ctk.CTkLabel(gesture_card, text="✌️ SEM GESTO", font=ctk.CTkFont(size=24, weight="bold"))
+        self.lbl_active_gesture = ctk.CTkLabel(gesture_card, text="SEM GESTO", font=ctk.CTkFont(size=22, weight="bold"))
         self.lbl_active_gesture.pack(pady=(20, 5))
 
         ctk.CTkLabel(gesture_card, text="Confiança:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
@@ -552,13 +701,13 @@ class MainWindow(ctk.CTk):
             lbl_st.pack(side="left", padx=10)
 
             btn_test = ctk.CTkButton(
-                right_frame, text="🧪 Testar", width=80, fg_color="gray40", hover_color="gray30",
+                right_frame, text="Testar", width=80, fg_color="gray40", hover_color="gray30",
                 command=lambda id=g_id: ActionExecutor.execute(profile.gestures[id].action, gesture_name=profile.gestures[id].custom_name)
             )
             btn_test.pack(side="left", padx=5)
 
             btn_edit = ctk.CTkButton(
-                right_frame, text="✏️ Editar", width=80,
+                right_frame, text="Editar", width=80,
                 command=lambda id=g_id: GestureEditDialog(self, id, self._refresh_gestures_list)
             )
             btn_edit.pack(side="left", padx=5)
@@ -581,13 +730,13 @@ class MainWindow(ctk.CTk):
         self.combo_profiles.set(config_manager.config.active_profile)
         self.combo_profiles.pack(side="left", padx=(0, 15))
 
-        btn_new_p = ctk.CTkButton(top_bar, text="➕ Novo Perfil", command=self._create_new_profile)
+        btn_new_p = ctk.CTkButton(top_bar, text="Novo Perfil", command=self._create_new_profile)
         btn_new_p.pack(side="left", padx=5)
 
-        btn_dup_p = ctk.CTkButton(top_bar, text="📋 Duplicar Perfil", fg_color="gray40", command=self._duplicate_profile)
+        btn_dup_p = ctk.CTkButton(top_bar, text="Duplicar Perfil", fg_color="gray40", command=self._duplicate_profile)
         btn_dup_p.pack(side="left", padx=5)
 
-        btn_del_p = ctk.CTkButton(top_bar, text="🗑️ Excluir Perfil", fg_color="#c92a2a", hover_color="#a61e1e", command=self._delete_profile)
+        btn_del_p = ctk.CTkButton(top_bar, text="Excluir Perfil", fg_color="#c92a2a", hover_color="#a61e1e", command=self._delete_profile)
         btn_del_p.pack(side="left", padx=5)
 
         self.scroll_profiles = ctk.CTkScrollableFrame(page)
@@ -603,7 +752,7 @@ class MainWindow(ctk.CTk):
             card = ctk.CTkFrame(self.scroll_profiles)
             card.pack(fill="x", padx=10, pady=8)
 
-            lbl_title = ctk.CTkLabel(card, text=f"👤 {p_name}", font=ctk.CTkFont(size=16, weight="bold"))
+            lbl_title = ctk.CTkLabel(card, text=p_name, font=ctk.CTkFont(size=16, weight="bold"))
             lbl_title.pack(anchor="w", padx=15, pady=(10, 2))
 
             lbl_desc = ctk.CTkLabel(card, text=p_cfg.description or "Sem descrição", text_color="gray70")
@@ -668,7 +817,7 @@ class MainWindow(ctk.CTk):
         self.entry_obs_pass.insert(0, config_manager.config.obs.password)
         self.entry_obs_pass.grid(row=1, column=1, padx=15, pady=10)
 
-        btn_conn = ctk.CTkButton(cfg_frame, text="⚡ Conectar Agora", command=self._connect_obs)
+        btn_conn = ctk.CTkButton(cfg_frame, text="Conectar Agora", command=self._connect_obs)
         btn_conn.grid(row=1, column=2, columnspan=2, padx=15, pady=10, sticky="ew")
 
         # Seção de Descoberta Automática
@@ -679,7 +828,7 @@ class MainWindow(ctk.CTk):
         disc_header.pack(fill="x", padx=15, pady=10)
         ctk.CTkLabel(disc_header, text="Cenas e Fontes Descobertas Automaticamente", font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
 
-        btn_ref = ctk.CTkButton(disc_header, text="🔄 Atualizar Descoberta", width=160, command=lambda: obs_discovery.refresh())
+        btn_ref = ctk.CTkButton(disc_header, text="Atualizar Descoberta", width=160, command=lambda: obs_discovery.refresh())
         btn_ref.pack(side="right")
 
         disc_scroll = ctk.CTkScrollableFrame(disc_frame)
@@ -706,10 +855,26 @@ class MainWindow(ctk.CTk):
         cam_frame = ctk.CTkFrame(page)
         cam_frame.pack(fill="x", pady=10)
 
-        ctk.CTkLabel(cam_frame, text="Índice da Câmera (Dispositivo):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(15, 2))
-        self.combo_cam_idx = ctk.CTkOptionMenu(cam_frame, values=["0", "1", "2", "3"], command=self._on_cam_index_changed)
-        self.combo_cam_idx.set(str(config_manager.config.camera.device_index))
-        self.combo_cam_idx.pack(anchor="w", padx=15, pady=(0, 15))
+        ctk.CTkLabel(cam_frame, text="Dispositivo de Câmera de Preferência:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(15, 2))
+
+        cam_box = ctk.CTkFrame(cam_frame, fg_color="transparent")
+        cam_box.pack(anchor="w", padx=15, pady=(0, 15), fill="x")
+
+        self.combo_cam_idx = ctk.CTkOptionMenu(
+            cam_box,
+            values=["Buscando câmeras..."],
+            width=360,
+            command=self._on_camera_selected_from_menu
+        )
+        self.combo_cam_idx.pack(side="left", padx=(0, 10))
+
+        btn_refresh_cam = ctk.CTkButton(
+            cam_box,
+            text="Escanear Câmeras",
+            width=150,
+            command=self._refresh_camera_devices_list
+        )
+        btn_refresh_cam.pack(side="left")
 
         self.switch_landmarks = ctk.CTkSwitch(cam_frame, text="Desenhar Esqueleto da Mão (Landmarks 3D)", command=self._toggle_landmarks)
         if config_manager.config.camera.draw_landmarks:
@@ -734,15 +899,55 @@ class MainWindow(ctk.CTk):
         self.combo_pref_hand.set(curr_val)
         self.combo_pref_hand.pack(anchor="w", padx=15, pady=(0, 15))
 
+    def _refresh_camera_devices_list(self):
+        """Varre os dispositivos de vídeo conectados e atualiza os menus cascata (Dashboard e Câmera)."""
+        devices = get_available_cameras()
+        self._camera_devices_cache = devices
+
+        options = []
+        target_label = None
+        current_idx = config_manager.config.camera.device_index
+
+        for idx, name in devices:
+            lbl = f"{idx}: {name}"
+            options.append(lbl)
+            if idx == current_idx:
+                target_label = lbl
+
+        if not options:
+            options = ["Nenhuma câmera encontrada"]
+            target_label = "Nenhuma câmera encontrada"
+        elif target_label is None:
+            target_label = options[0]
+
+        if hasattr(self, 'dash_combo_camera'):
+            self.dash_combo_camera.configure(values=options)
+            self.dash_combo_camera.set(target_label)
+
+        if hasattr(self, 'combo_cam_idx'):
+            self.combo_cam_idx.configure(values=options)
+            self.combo_cam_idx.set(target_label)
+
+    def _on_camera_selected_from_menu(self, choice: str):
+        """Handler chamado quando o usuário seleciona uma câmera no menu cascata."""
+        try:
+            idx = int(choice.split(":")[0].strip())
+        except Exception:
+            return
+
+        current_idx = config_manager.config.camera.device_index
+        if idx != current_idx:
+            logger.log(f"Trocando para a câmera '{choice}'...")
+            if hasattr(self, 'dash_combo_camera'):
+                self.dash_combo_camera.set(choice)
+            if hasattr(self, 'combo_cam_idx'):
+                self.combo_cam_idx.set(choice)
+
+            threading.Thread(target=camera_handler.switch_camera, args=(idx,), daemon=True).start()
+
     def _on_pref_hand_changed(self, choice: str):
         config_manager.config.camera.preferred_hand = choice
         config_manager.save()
-
-    def _on_cam_index_changed(self, choice):
-        config_manager.config.camera.device_index = int(choice)
-        config_manager.save()
-        camera_handler.stop()
-        camera_handler.start()
 
     def _toggle_landmarks(self):
         config_manager.config.camera.draw_landmarks = bool(self.switch_landmarks.get())
@@ -766,7 +971,7 @@ class MainWindow(ctk.CTk):
         self.combo_calib_g = ctk.CTkOptionMenu(card, values=gestures_keys)
         self.combo_calib_g.pack(anchor="w", padx=15, pady=(0, 15))
 
-        btn_start_calib = ctk.CTkButton(card, text="🎯 Iniciar Calibração (30 Frames)", command=self._start_calibration)
+        btn_start_calib = ctk.CTkButton(card, text="Iniciar Calibração (30 Frames)", command=self._start_calibration)
         btn_start_calib.pack(anchor="w", padx=15, pady=(0, 15))
 
         self.progress_calib = ctk.CTkProgressBar(card, width=400)
@@ -781,7 +986,7 @@ class MainWindow(ctk.CTk):
 
         self.btn_apply_calib = ctk.CTkButton(
             card,
-            text="🎯 Aplicar Sugestão ao Gesto",
+            text="Aplicar Sugestão ao Gesto",
             command=self._apply_calib_suggestion,
             state="disabled",
             fg_color="#2b8a3e",
@@ -819,7 +1024,7 @@ class MainWindow(ctk.CTk):
             config_manager.update_gesture(g_id, g_cfg)
 
             self.lbl_calib_applied_feedback.configure(
-                text=f"✅ Sugestão aplicada com sucesso ao gesto '{g_id}'!\n(Sensibilidade: {sens}%, Confirmação: {req_frames} frames)"
+                text=f"Sugestão aplicada com sucesso ao gesto '{g_id}'!\n(Sensibilidade: {sens}%, Confirmação: {req_frames} frames)"
             )
             self.btn_apply_calib.configure(state="disabled")
             if hasattr(self, 'scroll_gestures'):
@@ -834,7 +1039,7 @@ class MainWindow(ctk.CTk):
 
         ctk.CTkLabel(top, text="Logs do Sistema em Tempo Real", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
 
-        btn_clr = ctk.CTkButton(top, text="🗑️ Limpar Logs", width=120, command=lambda: logger.clear())
+        btn_clr = ctk.CTkButton(top, text="Limpar Logs", width=120, command=lambda: logger.clear())
         btn_clr.pack(side="right")
 
         self.textbox_logs = ctk.CTkTextbox(page, width=700, height=450, font=ctk.CTkFont(family="Consolas", size=12))
@@ -855,10 +1060,38 @@ class MainWindow(ctk.CTk):
         )
         if config_manager.config.confirm_destructive_actions:
             self.switch_confirm_dest.select()
-        self.switch_confirm_dest.pack(anchor="w", padx=15, pady=15)
+        self.switch_confirm_dest.pack(anchor="w", padx=15, pady=(15, 8))
+
+        self.switch_audio_feedback = ctk.CTkSwitch(
+            card, text="Feedback Sonoro ao Disparar Gesto (Bip de confirmação, inclusive minimizado)",
+            command=self._save_general_settings
+        )
+        if getattr(config_manager.config, 'audio_feedback', True):
+            self.switch_audio_feedback.select()
+        self.switch_audio_feedback.pack(anchor="w", padx=15, pady=(8, 15))
+
+        # Card informativo sobre operação em segundo plano
+        card_bg = ctk.CTkFrame(page)
+        card_bg.pack(fill="x", pady=10)
+
+        ctk.CTkLabel(
+            card_bg, text="ℹ️ Operação em Segundo Plano (Minimizado)",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", padx=15, pady=(15, 5))
+
+        info_text = (
+            "• O sistema continua capturando e executando gestos no OBS mesmo com a janela minimizada.\n"
+            "• Ao minimizar a janela, a renderização gráfica é pausada para economizar CPU.\n"
+            "• O feedback sonoro (bip) confirma quando um gesto é acionado sem precisar abrir a janela."
+        )
+        ctk.CTkLabel(
+            card_bg, text=info_text, justify="left", text_color="gray70", wraplength=600
+        ).pack(anchor="w", padx=15, pady=(0, 15))
 
     def _save_general_settings(self):
         config_manager.config.confirm_destructive_actions = bool(self.switch_confirm_dest.get())
+        if hasattr(self, 'switch_audio_feedback'):
+            config_manager.config.audio_feedback = bool(self.switch_audio_feedback.get())
         config_manager.save()
 
     def _toggle_test_mode(self):
@@ -879,16 +1112,16 @@ class MainWindow(ctk.CTk):
     def _on_camera_fps(self, fps: float):
         def update():
             if hasattr(self, 'lbl_fps_val'):
-                self.lbl_fps_val.configure(text=f"⚡ FPS: {fps:.1f}")
+                self.lbl_fps_val.configure(text=f"FPS: {fps:.1f}")
         self._ui_queue.put(update)
 
     def _on_obs_status(self, connected: bool, message: str):
         def update():
             if connected:
-                self.lbl_obs_icon.configure(text="🟢 OBS Conectado", text_color="#2b8a3e")
+                self.lbl_obs_icon.configure(text="● OBS Conectado", text_color="#2b8a3e")
                 obs_discovery.refresh()
             else:
-                self.lbl_obs_icon.configure(text="🔴 OBS Desconectado", text_color="#c92a2a")
+                self.lbl_obs_icon.configure(text="● OBS Desconectado", text_color="#c92a2a")
         self._ui_queue.put(update)
 
     def _on_obs_discovery(self, scenes, sources):
@@ -903,10 +1136,9 @@ class MainWindow(ctk.CTk):
             if self.current_page == "dashboard":
                 profile = config_manager.get_active_profile()
                 g_cfg = profile.gestures.get(gesture)
-                icon = g_cfg.icon if g_cfg else "🖐️"
                 name = g_cfg.custom_name if g_cfg else (gesture.upper() if gesture != "unknown" else "SEM GESTO")
 
-                self.lbl_active_gesture.configure(text=f"{icon} {name}")
+                self.lbl_active_gesture.configure(text=f"{name}")
                 self.lbl_conf_pct.configure(text=f"{confidence} %")
                 self.progress_stability.set(stability / 100.0)
 
@@ -944,7 +1176,7 @@ class MainWindow(ctk.CTk):
 
             top.protocol("WM_DELETE_WINDOW", close_dialog)
 
-            ctk.CTkLabel(top, text="⚠️ Ação Destrutiva Detectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+            ctk.CTkLabel(top, text="Ação Destrutiva Detectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
             ctk.CTkLabel(top, text=f"Gesto '{gesture}' solicitou a ação '{action.action_type}'.\nConfirma a execução?", wraplength=350).pack(pady=10)
 
             btn_box = ctk.CTkFrame(top, fg_color="transparent")
@@ -968,8 +1200,7 @@ class MainWindow(ctk.CTk):
             def on_yes():
                 config_manager.config.camera.device_index = fallback_index
                 config_manager.save()
-                if hasattr(self, 'combo_cam_idx'):
-                    self.combo_cam_idx.set(str(fallback_index))
+                self._refresh_camera_devices_list()
                 top.destroy()
 
             def on_no():
@@ -977,7 +1208,7 @@ class MainWindow(ctk.CTk):
 
             top.protocol("WM_DELETE_WINDOW", on_no)
 
-            ctk.CTkLabel(top, text="📷 Câmera Alternativa Conectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+            ctk.CTkLabel(top, text="Câmera Alternativa Conectada", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
             msg = (
                 f"O dispositivo {original_index} configurado não pôde ser aberto.\n"
                 f"Foi detectada uma webcam ativa no dispositivo {fallback_index}.\n\n"
